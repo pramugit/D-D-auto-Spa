@@ -15,6 +15,7 @@ import { JobCardDetailPage } from "./pages/JobCardDetailPage";
 import { InvoicesPage } from "./pages/InvoicesPage";
 import { InventoryPage } from "./pages/InventoryPage";
 import { UsersPage } from "./pages/UsersPage";
+import { ReportsPage } from "./pages/ReportsPage";
 import { PortalLoginPage } from "./pages/portal/PortalLoginPage";
 import { PortalBookPage } from "./pages/portal/PortalBookPage";
 import { PortalBookingsPage } from "./pages/portal/PortalBookingsPage";
@@ -66,6 +67,14 @@ function App() {
                 }
               />
               <Route path="/inventory" element={<InventoryPage />} />
+              <Route
+                path="/reports"
+                element={
+                  <ProtectedRoute roles={["ADMIN"]}>
+                    <ReportsPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/users"
                 element={

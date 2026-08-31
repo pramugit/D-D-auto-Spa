@@ -4,8 +4,8 @@ import type { BookingStatus } from "@prisma/client";
 import { createAndSendNotification } from "./notificationService";
 import { safeCustomerSelect } from "../utils/prismaSelects";
 
-const BUSINESS_START_HOUR = 9;
-const BUSINESS_END_HOUR = 17;
+export const BUSINESS_START_HOUR = 9;
+export const BUSINESS_END_HOUR = 17;
 const SLOT_GRANULARITY_MINUTES = 30;
 const DEFAULT_SERVICE_DURATION_MINUTES = 60;
 
@@ -87,7 +87,7 @@ export async function createBooking(input: {
 }
 
 /** Total estimated duration (minutes) of a booking's line items. */
-async function bookingDurationMinutes(bookingId: string): Promise<number> {
+export async function bookingDurationMinutes(bookingId: string): Promise<number> {
   const items = await prisma.bookingService.findMany({
     where: { bookingId },
     include: { service: true, package: { include: { services: { include: { service: true } } } } },
