@@ -1,8 +1,14 @@
 import { Router } from "express";
 import * as controller from "../controllers/jobCardController";
+import * as invoiceController from "../controllers/invoiceController";
 import { authenticate, requireRole, requireStaff } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
-import { assignTechniciansSchema, createDamageInspectionSchema, jobCardNotesSchema } from "../utils/schemas";
+import {
+  assignTechniciansSchema,
+  createDamageInspectionSchema,
+  createInvoiceSchema,
+  jobCardNotesSchema,
+} from "../utils/schemas";
 import { asyncHandler } from "../middleware/errorHandler";
 import { uploadPhoto } from "../middleware/upload";
 
@@ -28,5 +34,12 @@ router.post(
 );
 
 router.post("/:id/photos", uploadPhoto.single("photo"), asyncHandler(controller.uploadPhoto));
+
+router.post(
+  "/:id/invoice",
+  manage,
+  validateBody(createInvoiceSchema),
+  asyncHandler(invoiceController.createForJobCard)
+);
 
 export default router;

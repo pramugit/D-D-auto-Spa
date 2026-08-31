@@ -143,6 +143,23 @@ export const jobCardNotesSchema = z.object({
   notes: z.string().optional(),
 });
 
+export const paymentMethodEnum = z.enum(["CASH", "CARD", "BANK_TRANSFER"]);
+export const paymentStatusEnum = z.enum(["PENDING_VERIFICATION", "VERIFIED", "REJECTED"]);
+
+export const createInvoiceSchema = z.object({
+  taxRate: z.number().min(0).max(1).optional(), // fraction, e.g. 0.08 for 8%
+  discount: z.number().nonnegative().optional(),
+});
+
+export const createPaymentSchema = z.object({
+  method: paymentMethodEnum,
+  amount: z.coerce.number().positive(),
+});
+
+export const verifyPaymentSchema = z.object({
+  status: z.enum(["VERIFIED", "REJECTED"]),
+});
+
 export const createUserSchema = registerStaffSchema;
 export const updateUserSchema = z.object({
   name: z.string().min(1).optional(),

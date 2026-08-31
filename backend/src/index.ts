@@ -15,6 +15,8 @@ import userRoutes from "./routes/userRoutes";
 import bookingRoutes from "./routes/bookingRoutes";
 import jobCardRoutes from "./routes/jobCardRoutes";
 import damageInspectionRoutes from "./routes/damageInspectionRoutes";
+import invoiceRoutes from "./routes/invoiceRoutes";
+import paymentRoutes from "./routes/paymentRoutes";
 
 const app = express();
 
@@ -48,6 +50,8 @@ app.use("/users", userRoutes);
 app.use("/bookings", bookingRoutes);
 app.use("/job-cards", jobCardRoutes);
 app.use("/damage-inspections", damageInspectionRoutes);
+app.use("/invoices", invoiceRoutes);
+app.use("/payments", paymentRoutes);
 
 app.use(errorHandler);
 
