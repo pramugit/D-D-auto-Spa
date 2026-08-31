@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.env.local
+uploads/photos/*
+uploads/slips/*
+!uploads/photos/.gitkeep
+!uploads/slips/.gitkeep
+*.log
