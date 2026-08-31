@@ -155,8 +155,12 @@ export function PortalBookPage() {
 
       <div className="mb-6 rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="mb-3 text-sm font-semibold uppercase text-slate-500">2. Services</h2>
-        {!selectedVehicle && <div className="text-sm text-slate-400">Select a vehicle first to see pricing.</div>}
-        {selectedVehicle && (
+        {!selectedVehicle && (
+          <div className="mb-3 text-sm text-slate-400">Select a vehicle above to see pricing for your vehicle.</div>
+        )}
+        {services.length === 0 ? (
+          <div className="text-sm text-slate-400">No services are available to book right now.</div>
+        ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             <ServiceGroup
               title="Exterior"
@@ -164,6 +168,7 @@ export function PortalBookPage() {
               selected={selectedServices}
               onToggle={toggleService}
               priceFor={priceFor}
+              vehicleSelected={!!selectedVehicle}
             />
             <ServiceGroup
               title="Interior"
@@ -171,6 +176,7 @@ export function PortalBookPage() {
               selected={selectedServices}
               onToggle={toggleService}
               priceFor={priceFor}
+              vehicleSelected={!!selectedVehicle}
             />
           </div>
         )}
@@ -235,36 +241,41 @@ function ServiceGroup({
   selected,
   onToggle,
   priceFor,
+  vehicleSelected,
 }: {
   title: string;
   services: Service[];
   selected: Set<string>;
   onToggle: (id: string) => void;
   priceFor: (s: Service) => string | null;
+  vehicleSelected: boolean;
 }) {
   return (
     <div className="rounded-md border border-slate-200 p-3">
       <div className="mb-2 text-xs font-semibold uppercase text-slate-400">{title}</div>
-      {services.length === 0 && <div className="text-xs text-slate-400">No services available.</div>}
+      {services.length === 0 && <div className="text-xs text-slate-400">No {title.toLowerCase()} services available.</div>}
       {services.map((s) => {
         const price = priceFor(s);
+        const disabled = !price;
         return (
           <label
             key={s.id}
             className={`mb-1 flex items-center justify-between rounded px-2 py-1.5 text-sm hover:bg-slate-50 ${
-              !price ? "opacity-40" : ""
+              disabled ? "text-slate-400" : ""
             }`}
           >
             <span className="flex items-center gap-2">
               <input
                 type="checkbox"
-                disabled={!price}
+                disabled={disabled}
                 checked={selected.has(s.id)}
                 onChange={() => onToggle(s.id)}
               />
               {s.name}
             </span>
-            <span className="text-xs text-slate-500">{price ? `$${price}` : "N/A"}</span>
+            <span className="text-xs">
+              {price ? `$${price}` : vehicleSelected ? "Not offered for this vehicle" : "Select vehicle"}
+            </span>
           </label>
         );
       })}
