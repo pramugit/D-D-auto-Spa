@@ -82,6 +82,67 @@ export const createBaySchema = z.object({
 
 export const updateBaySchema = createBaySchema.partial();
 
+export const bookingStatusEnum = z.enum([
+  "PENDING",
+  "CONFIRMED",
+  "IN_PROGRESS",
+  "QUALITY_CHECK",
+  "READY",
+  "COMPLETED",
+  "CANCELLED",
+]);
+
+export const inspectionStageEnum = z.enum(["PRE_SERVICE", "POST_SERVICE"]);
+export const photoTypeEnum = z.enum(["BEFORE", "AFTER"]);
+
+const bookingLineItemSchema = z
+  .object({
+    serviceId: z.string().uuid().optional(),
+    packageId: z.string().uuid().optional(),
+  })
+  .refine((v) => (v.serviceId ? !v.packageId : !!v.packageId), {
+    message: "Each line item must have exactly one of serviceId or packageId",
+  });
+
+export const createBookingSchema = z.object({
+  customerId: z.string().uuid().optional(), // required for staff callers, ignored for customer callers
+  vehicleId: z.string().uuid(),
+  scheduledAt: z.coerce.date(),
+  items: z.array(bookingLineItemSchema).min(1),
+});
+
+export const availabilityQuerySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD"),
+  durationMinutes: z.coerce.number().int().positive().optional(),
+});
+
+export const transitionBookingStatusSchema = z.object({
+  status: bookingStatusEnum,
+});
+
+export const assignBaySchema = z.object({
+  bayId: z.string().uuid().nullable(),
+});
+
+export const assignTechniciansSchema = z.object({
+  technicianIds: z.array(z.string().uuid()).min(1),
+});
+
+export const createDamageInspectionSchema = z.object({
+  stage: inspectionStageEnum,
+  diagramMarkings: z.array(
+    z.object({
+      x: z.number(),
+      y: z.number(),
+      note: z.string().min(1),
+    })
+  ),
+});
+
+export const jobCardNotesSchema = z.object({
+  notes: z.string().optional(),
+});
+
 export const createUserSchema = registerStaffSchema;
 export const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
