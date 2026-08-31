@@ -17,6 +17,9 @@ import jobCardRoutes from "./routes/jobCardRoutes";
 import damageInspectionRoutes from "./routes/damageInspectionRoutes";
 import invoiceRoutes from "./routes/invoiceRoutes";
 import paymentRoutes from "./routes/paymentRoutes";
+import inventoryRoutes from "./routes/inventoryRoutes";
+import reviewRoutes from "./routes/reviewRoutes";
+import notificationRoutes from "./routes/notificationRoutes";
 
 const app = express();
 
@@ -49,9 +52,12 @@ app.use("/bays", bayRoutes);
 app.use("/users", userRoutes);
 app.use("/bookings", bookingRoutes);
 app.use("/job-cards", jobCardRoutes);
+app.use("/job-cards", reviewRoutes);
 app.use("/damage-inspections", damageInspectionRoutes);
 app.use("/invoices", invoiceRoutes);
 app.use("/payments", paymentRoutes);
+app.use("/inventory-items", inventoryRoutes);
+app.use("/notifications", notificationRoutes);
 
 app.use(errorHandler);
 

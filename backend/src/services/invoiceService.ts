@@ -42,12 +42,17 @@ async function verifiedTotal(invoiceId: string): Promise<number> {
  * the booking COMPLETED once fully paid (only if that's currently a
  * valid transition — i.e. the booking is at READY).
  */
+// 1 loyalty point per whole currency unit spent.
+const LOYALTY_POINTS_PER_CURRENCY_UNIT = 1;
+
 export async function reconcileInvoiceStatus(invoiceId: string) {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     include: { jobCard: { include: { booking: true } } },
   });
   if (!invoice) throw new AppError(404, "Invoice not found");
+
+  const wasAlreadyPaid = invoice.status === "PAID";
 
   const paid = await verifiedTotal(invoiceId);
   let status: "UNPAID" | "PARTIALLY_PAID" | "PAID" = "UNPAID";
@@ -56,7 +61,13 @@ export async function reconcileInvoiceStatus(invoiceId: string) {
 
   const updated = await prisma.invoice.update({ where: { id: invoiceId }, data: { status } });
 
-  if (status === "PAID") {
+  if (status === "PAID" && !wasAlreadyPaid) {
+    const points = Math.floor(Number(invoice.total) * LOYALTY_POINTS_PER_CURRENCY_UNIT);
+    await prisma.customer.update({
+      where: { id: invoice.jobCard.booking.customerId },
+      data: { loyaltyPoints: { increment: points } },
+    });
+
     const bookingStatus = invoice.jobCard.booking.status;
     if (BOOKING_STATUS_TRANSITIONS[bookingStatus]?.includes("COMPLETED")) {
       await transitionBookingStatus(invoice.jobCard.booking.id, "COMPLETED");

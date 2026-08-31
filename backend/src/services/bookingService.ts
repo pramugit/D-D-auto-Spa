@@ -1,6 +1,7 @@
 import { prisma } from "../utils/prisma";
 import { AppError } from "../utils/AppError";
 import type { BookingStatus } from "@prisma/client";
+import { createAndSendNotification } from "./notificationService";
 
 const BUSINESS_START_HOUR = 9;
 const BUSINESS_END_HOUR = 17;
@@ -153,8 +154,8 @@ export async function transitionBookingStatus(bookingId: string, nextStatus: Boo
     throw new AppError(400, `Cannot transition booking from ${booking.status} to ${nextStatus}`);
   }
 
-  return prisma.$transaction(async (tx) => {
-    const updated = await tx.booking.update({ where: { id: bookingId }, data: { status: nextStatus } });
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.booking.update({ where: { id: bookingId }, data: { status: nextStatus } });
 
     if (nextStatus === "CONFIRMED") {
       await tx.jobCard.upsert({
@@ -175,6 +176,27 @@ export async function transitionBookingStatus(bookingId: string, nextStatus: Boo
       await tx.jobCard.update({ where: { bookingId }, data: jobCardData });
     }
 
-    return updated;
+    return result;
   });
+
+  // Fire-and-record notifications on the two customer-facing milestones.
+  // sendNotification itself is a stub — see notificationService.ts for
+  // where a real SMS/email provider plugs in.
+  if (nextStatus === "CONFIRMED") {
+    await createAndSendNotification({
+      customerId: booking.customerId,
+      type: "BOOKING_CONFIRMED",
+      message: "Your booking has been confirmed. We look forward to seeing you!",
+      channel: "EMAIL",
+    });
+  } else if (nextStatus === "READY") {
+    await createAndSendNotification({
+      customerId: booking.customerId,
+      type: "JOB_READY",
+      message: "Your vehicle is ready for pickup!",
+      channel: "SMS",
+    });
+  }
+
+  return updated;
 }

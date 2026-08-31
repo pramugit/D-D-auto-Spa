@@ -1,11 +1,13 @@
 import { Router } from "express";
 import * as controller from "../controllers/jobCardController";
 import * as invoiceController from "../controllers/invoiceController";
+import * as inventoryController from "../controllers/inventoryController";
 import { authenticate, requireRole, requireStaff } from "../middleware/auth";
 import { validateBody } from "../middleware/validate";
 import {
   assignTechniciansSchema,
   createDamageInspectionSchema,
+  createInventoryUsageSchema,
   createInvoiceSchema,
   jobCardNotesSchema,
 } from "../utils/schemas";
@@ -40,6 +42,12 @@ router.post(
   manage,
   validateBody(createInvoiceSchema),
   asyncHandler(invoiceController.createForJobCard)
+);
+
+router.post(
+  "/:id/inventory-usage",
+  validateBody(createInventoryUsageSchema),
+  asyncHandler(inventoryController.recordUsage)
 );
 
 export default router;

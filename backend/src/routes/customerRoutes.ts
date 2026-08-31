@@ -21,6 +21,8 @@ router.post("/", canManage, validateBody(createCustomerSchema), asyncHandler(cus
 router.patch("/:id", canManage, validateBody(updateCustomerSchema), asyncHandler(customerController.update));
 router.delete("/:id", requireRole(["ADMIN"]), asyncHandler(customerController.remove));
 
+router.get("/:id/loyalty", asyncHandler(customerController.getLoyalty));
+
 router.get("/:id/vehicles", asyncHandler(customerController.listVehicles));
 router.post(
   "/:id/vehicles",

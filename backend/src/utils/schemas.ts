@@ -160,6 +160,35 @@ export const verifyPaymentSchema = z.object({
   status: z.enum(["VERIFIED", "REJECTED"]),
 });
 
+export const createInventoryItemSchema = z.object({
+  name: z.string().min(1),
+  unit: z.string().min(1),
+  quantityInStock: z.number().nonnegative(),
+  reorderLevel: z.number().nonnegative(),
+});
+
+export const updateInventoryItemSchema = createInventoryItemSchema.partial();
+
+export const createInventoryUsageSchema = z.object({
+  itemId: z.string().uuid(),
+  quantityUsed: z.number().positive(),
+});
+
+export const createReviewSchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  comment: z.string().optional(),
+});
+
+export const notificationTypeEnum = z.enum(["BOOKING_CONFIRMED", "JOB_READY", "PAYMENT_VERIFIED", "GENERAL"]);
+export const notificationChannelEnum = z.enum(["SMS", "EMAIL"]);
+
+export const createNotificationSchema = z.object({
+  customerId: z.string().uuid(),
+  type: notificationTypeEnum,
+  message: z.string().min(1),
+  channel: notificationChannelEnum,
+});
+
 export const createUserSchema = registerStaffSchema;
 export const updateUserSchema = z.object({
   name: z.string().min(1).optional(),

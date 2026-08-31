@@ -47,6 +47,18 @@ export async function remove(req: Request, res: Response) {
   res.status(204).send();
 }
 
+export async function getLoyalty(req: Request, res: Response) {
+  if (req.user?.type === "customer" && req.user.sub !== req.params.id) {
+    throw new AppError(403, "Not your loyalty account");
+  }
+  const customer = await prisma.customer.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, name: true, loyaltyPoints: true },
+  });
+  if (!customer) throw new AppError(404, "Customer not found");
+  res.json(customer);
+}
+
 // ---- nested vehicles ----
 
 export async function listVehicles(req: Request, res: Response) {
