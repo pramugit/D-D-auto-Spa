@@ -6,6 +6,7 @@ import { prisma } from "./utils/prisma";
 import { errorHandler } from "./middleware/errorHandler";
 
 import authRoutes from "./routes/authRoutes";
+import customerAuthRoutes from "./routes/customerAuthRoutes";
 import customerRoutes from "./routes/customerRoutes";
 import serviceCategoryRoutes from "./routes/serviceCategoryRoutes";
 import serviceRoutes from "./routes/serviceRoutes";
@@ -44,6 +45,7 @@ app.get("/health/db", async (_req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/customer-auth", customerAuthRoutes);
 app.use("/customers", customerRoutes);
 app.use("/service-categories", serviceCategoryRoutes);
 app.use("/services", serviceRoutes);

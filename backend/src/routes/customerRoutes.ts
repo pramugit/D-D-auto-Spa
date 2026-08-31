@@ -15,7 +15,9 @@ const canManage = requireRole(["ADMIN", "MANAGER", "RECEPTIONIST"]);
 
 router.use(authenticate);
 
-router.get("/", asyncHandler(customerController.list));
+// Staff-only listing (customers reach their own record via /:id, gated
+// in the controller); a bare requireStaff check keeps customer tokens out.
+router.get("/", requireRole(["ADMIN", "MANAGER", "RECEPTIONIST", "TECHNICIAN"]), asyncHandler(customerController.list));
 router.get("/:id", asyncHandler(customerController.get));
 router.post("/", canManage, validateBody(createCustomerSchema), asyncHandler(customerController.create));
 router.patch("/:id", canManage, validateBody(updateCustomerSchema), asyncHandler(customerController.update));
@@ -26,7 +28,10 @@ router.get("/:id/loyalty", asyncHandler(customerController.getLoyalty));
 router.get("/:id/vehicles", asyncHandler(customerController.listVehicles));
 router.post(
   "/:id/vehicles",
-  canManage,
+  // A customer may add a vehicle to their own record; staff need the
+  // canManage role. Ownership for the customer case is enforced in the
+  // controller.
+  (req, res, next) => (req.user?.type === "customer" ? next() : canManage(req, res, next)),
   validateBody(createVehicleSchema),
   asyncHandler(customerController.createVehicle)
 );

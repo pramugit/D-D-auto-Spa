@@ -2,10 +2,11 @@ import type { Request, Response } from "express";
 import { prisma } from "../utils/prisma";
 import { AppError } from "../utils/AppError";
 import { createInvoiceForJobCard, reconcileInvoiceStatus } from "../services/invoiceService";
+import { safeCustomerSelect } from "../utils/prismaSelects";
 
 const invoiceInclude = {
   payments: true,
-  jobCard: { include: { booking: { include: { customer: true, vehicle: true } } } },
+  jobCard: { include: { booking: { include: { customer: { select: safeCustomerSelect }, vehicle: true } } } },
 } as const;
 
 export async function createForJobCard(req: Request, res: Response) {

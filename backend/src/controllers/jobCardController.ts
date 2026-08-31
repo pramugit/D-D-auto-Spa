@@ -1,9 +1,16 @@
 import type { Request, Response } from "express";
 import { prisma } from "../utils/prisma";
 import { AppError } from "../utils/AppError";
+import { safeCustomerSelect } from "../utils/prismaSelects";
 
 const jobCardInclude = {
-  booking: { include: { customer: true, vehicle: true, services: { include: { service: true, package: true } } } },
+  booking: {
+    include: {
+      customer: { select: safeCustomerSelect },
+      vehicle: true,
+      services: { include: { service: true, package: true } },
+    },
+  },
   technicians: { include: { user: { select: { id: true, name: true, email: true, role: true } } } },
   damageInspections: true,
   photos: true,

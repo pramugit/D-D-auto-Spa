@@ -117,7 +117,23 @@ export interface Booking {
   customer?: Customer;
   vehicle?: Vehicle;
   services?: BookingServiceItem[];
-  jobCard?: JobCard | null;
+  // The /bookings endpoints nest a lighter job-card shape (no `booking`
+  // or `technicians`, to avoid re-embedding); the full JobCard type below
+  // is what /job-cards (staff) returns.
+  jobCard?: BookingJobCardSummary | null;
+}
+
+export interface BookingJobCardSummary {
+  id: string;
+  bookingId: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  status: BookingStatus;
+  notes?: string | null;
+  damageInspections: DamageInspection[];
+  photos: Photo[];
+  invoice?: Invoice | null;
+  review?: Review | null;
 }
 
 export interface DamageMarking {
@@ -187,6 +203,7 @@ export interface JobCard {
   damageInspections: DamageInspection[];
   photos: Photo[];
   invoice?: Invoice | null;
+  review?: Review | null;
 }
 
 export interface InventoryItem {

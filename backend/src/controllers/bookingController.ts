@@ -2,13 +2,21 @@ import type { Request, Response } from "express";
 import { prisma } from "../utils/prisma";
 import { AppError } from "../utils/AppError";
 import { createBooking, getAvailability, transitionBookingStatus } from "../services/bookingService";
+import { safeCustomerSelect } from "../utils/prismaSelects";
 
 const bookingInclude = {
   vehicle: true,
-  customer: true,
+  customer: { select: safeCustomerSelect },
   bay: true,
   services: { include: { service: true, package: true } },
-  jobCard: true,
+  jobCard: {
+    include: {
+      photos: true,
+      damageInspections: true,
+      invoice: { include: { payments: true } },
+      review: true,
+    },
+  },
 } as const;
 
 export async function list(req: Request, res: Response) {

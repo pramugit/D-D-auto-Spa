@@ -18,6 +18,14 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+export const registerCustomerSchema = z.object({
+  name: z.string().min(1),
+  phone: z.string().min(1),
+  email: z.string().email(),
+  password: z.string().min(8),
+  address: z.string().optional(),
+});
+
 export const createCustomerSchema = z.object({
   name: z.string().min(1),
   phone: z.string().min(1),

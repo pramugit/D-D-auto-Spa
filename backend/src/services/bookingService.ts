@@ -2,6 +2,7 @@ import { prisma } from "../utils/prisma";
 import { AppError } from "../utils/AppError";
 import type { BookingStatus } from "@prisma/client";
 import { createAndSendNotification } from "./notificationService";
+import { safeCustomerSelect } from "../utils/prismaSelects";
 
 const BUSINESS_START_HOUR = 9;
 const BUSINESS_END_HOUR = 17;
@@ -75,7 +76,11 @@ export async function createBooking(input: {
         })),
       },
     },
-    include: { services: { include: { service: true, package: true } }, vehicle: true, customer: true },
+    include: {
+      services: { include: { service: true, package: true } },
+      vehicle: true,
+      customer: { select: safeCustomerSelect },
+    },
   });
 
   return booking;

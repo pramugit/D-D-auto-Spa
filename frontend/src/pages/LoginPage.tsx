@@ -68,6 +68,9 @@ export function LoginPage() {
             {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
+        <a href="/portal/login" className="mt-4 block text-center text-sm text-slate-500 hover:underline">
+          Are you a customer? Go to the customer portal
+        </a>
       </div>
     </div>
   );

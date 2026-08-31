@@ -1,6 +1,9 @@
 import type { Request, Response } from "express";
 import { prisma } from "../utils/prisma";
 import { AppError } from "../utils/AppError";
+import { safeCustomerSelect } from "../utils/prismaSelects";
+
+const customerSelect = { ...safeCustomerSelect, vehicles: true } as const;
 
 export async function list(req: Request, res: Response) {
   const search = typeof req.query.search === "string" ? req.query.search : undefined;
@@ -15,22 +18,25 @@ export async function list(req: Request, res: Response) {
         }
       : undefined,
     orderBy: { createdAt: "desc" },
-    include: { vehicles: true },
+    select: customerSelect,
   });
   res.json(customers);
 }
 
 export async function get(req: Request, res: Response) {
+  if (req.user?.type === "customer" && req.user.sub !== req.params.id) {
+    throw new AppError(403, "Not your customer record");
+  }
   const customer = await prisma.customer.findUnique({
     where: { id: req.params.id },
-    include: { vehicles: true },
+    select: customerSelect,
   });
   if (!customer) throw new AppError(404, "Customer not found");
   res.json(customer);
 }
 
 export async function create(req: Request, res: Response) {
-  const customer = await prisma.customer.create({ data: req.body });
+  const customer = await prisma.customer.create({ data: req.body, select: customerSelect });
   res.status(201).json(customer);
 }
 
@@ -38,6 +44,7 @@ export async function update(req: Request, res: Response) {
   const customer = await prisma.customer.update({
     where: { id: req.params.id },
     data: req.body,
+    select: customerSelect,
   });
   res.json(customer);
 }
@@ -62,6 +69,9 @@ export async function getLoyalty(req: Request, res: Response) {
 // ---- nested vehicles ----
 
 export async function listVehicles(req: Request, res: Response) {
+  if (req.user?.type === "customer" && req.user.sub !== req.params.id) {
+    throw new AppError(403, "Not your vehicles");
+  }
   const vehicles = await prisma.vehicle.findMany({
     where: { customerId: req.params.id },
   });
@@ -69,6 +79,9 @@ export async function listVehicles(req: Request, res: Response) {
 }
 
 export async function createVehicle(req: Request, res: Response) {
+  if (req.user?.type === "customer" && req.user.sub !== req.params.id) {
+    throw new AppError(403, "Not your customer record");
+  }
   const customer = await prisma.customer.findUnique({ where: { id: req.params.id } });
   if (!customer) throw new AppError(404, "Customer not found");
   const vehicle = await prisma.vehicle.create({
