@@ -7,8 +7,390 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Full data model added in Phase 1.
-model Placeholder {
+// ---------- Enums ----------
+
+enum StaffRole {
+  ADMIN
+  MANAGER
+  TECHNICIAN
+  RECEPTIONIST
+}
+
+enum VehicleType {
+  SEDAN
+  SUV
+  HATCHBACK
+  VAN
+  PICKUP
+  OTHER
+}
+
+enum ServiceCategoryName {
+  EXTERIOR
+  INTERIOR
+}
+
+enum BayStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  QUALITY_CHECK
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum InspectionStage {
+  PRE_SERVICE
+  POST_SERVICE
+}
+
+enum PhotoType {
+  BEFORE
+  AFTER
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PAID
+  PARTIALLY_PAID
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+}
+
+enum PaymentStatus {
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+}
+
+enum NotificationType {
+  BOOKING_CONFIRMED
+  JOB_READY
+  PAYMENT_VERIFIED
+  GENERAL
+}
+
+enum NotificationChannel {
+  SMS
+  EMAIL
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+}
+
+// ---------- Models ----------
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  phone        String?
+  passwordHash String
+  role         StaffRole @default(TECHNICIAN)
+  createdAt    DateTime  @default(now())
+
+  inspectionsPerformed DamageInspection[] @relation("InspectedBy")
+  paymentsVerified     Payment[]          @relation("VerifiedBy")
+  jobCards             JobCardTechnician[]
+
+  @@map("users")
+}
+
+model Customer {
+  id            String   @id @default(uuid())
+  name          String
+  phone         String
+  email         String?  @unique
+  address       String?
+  passwordHash  String?
+  loyaltyPoints Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  vehicles      Vehicle[]
+  bookings      Booking[]
+  notifications Notification[]
+
+  @@map("customers")
+}
+
+model Vehicle {
+  id          String      @id @default(uuid())
+  customerId  String
+  customer    Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  make        String
+  model       String
+  year        Int
+  plateNumber String      @unique
+  color       String?
+  vehicleType VehicleType
+
+  bookings Booking[]
+
+  @@index([customerId])
+  @@map("vehicles")
+}
+
+model ServiceCategory {
+  id   String              @id @default(uuid())
+  name ServiceCategoryName @unique
+
+  services Service[]
+
+  @@map("service_categories")
+}
+
+model Service {
+  id              String   @id @default(uuid())
+  categoryId      String
+  category        ServiceCategory @relation(fields: [categoryId], references: [id])
+  name            String
+  description     String?
+  durationMinutes Int
+  active          Boolean  @default(true)
+
+  pricing         ServicePricing[]
+  bookingServices BookingService[]
+  packageServices ServicePackageService[]
+
+  @@index([categoryId])
+  @@map("services")
+}
+
+// Base price keyed by vehicle type (replaces a single json blob so
+// prices are queryable/validatable per vehicle type).
+model ServicePricing {
+  id          String      @id @default(uuid())
+  serviceId   String
+  service     Service     @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  vehicleType VehicleType
+  price       Decimal     @db.Decimal(10, 2)
+
+  @@unique([serviceId, vehicleType])
+  @@map("service_pricing")
+}
+
+model ServicePackage {
+  id              String   @id @default(uuid())
+  name            String
+  description     String?
+  discountedPrice Decimal  @db.Decimal(10, 2)
+  active          Boolean  @default(true)
+
+  services        ServicePackageService[]
+  bookingServices BookingService[]
+
+  @@map("service_packages")
+}
+
+// Many-to-many join: ServicePackage <-> Service
+model ServicePackageService {
+  packageId String
+  package   ServicePackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  serviceId String
+  service   Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([packageId, serviceId])
+  @@map("service_package_services")
+}
+
+model Bay {
+  id     String    @id @default(uuid())
+  name   String    @unique
+  status BayStatus @default(AVAILABLE)
+
+  bookings Booking[]
+
+  @@map("bays")
+}
+
+model Booking {
+  id          String        @id @default(uuid())
+  customerId  String
+  customer    Customer      @relation(fields: [customerId], references: [id])
+  vehicleId   String
+  vehicle     Vehicle       @relation(fields: [vehicleId], references: [id])
+  scheduledAt DateTime
+  bayId       String?
+  bay         Bay?          @relation(fields: [bayId], references: [id])
+  status      BookingStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+
+  services BookingService[]
+  jobCard  JobCard?
+
+  @@index([customerId])
+  @@index([vehicleId])
+  @@index([bayId])
+  @@index([scheduledAt])
+  @@map("bookings")
+}
+
+// A booked line item is either a single Service or a ServicePackage
+// (never both), with the price captured at time of booking.
+model BookingService {
+  id        String          @id @default(uuid())
+  bookingId String
+  booking   Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  serviceId String?
+  service   Service?        @relation(fields: [serviceId], references: [id])
+  packageId String?
+  package   ServicePackage? @relation(fields: [packageId], references: [id])
+  price     Decimal         @db.Decimal(10, 2)
+
+  @@index([bookingId])
+  @@map("booking_services")
+}
+
+model JobCard {
+  id            String        @id @default(uuid())
+  bookingId     String        @unique
+  booking       Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  status        BookingStatus @default(CONFIRMED)
+  notes         String?
+
+  technicians       JobCardTechnician[]
+  damageInspections DamageInspection[]
+  photos            Photo[]
+  inventoryUsages   InventoryUsage[]
+  invoice           Invoice?
+  review            Review?
+
+  @@map("job_cards")
+}
+
+// Many-to-many join: JobCard <-> User (assigned technicians)
+model JobCardTechnician {
+  jobCardId String
+  jobCard   JobCard @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id])
+
+  @@id([jobCardId, userId])
+  @@map("job_card_technicians")
+}
+
+model DamageInspection {
+  id                  String           @id @default(uuid())
+  jobCardId           String
+  jobCard             JobCard          @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  stage               InspectionStage
+  diagramMarkings     Json
+  inspectedByUserId   String
+  inspectedByUser     User             @relation("InspectedBy", fields: [inspectedByUserId], references: [id])
+  customerAcknowledged Boolean         @default(false)
+  acknowledgedAt      DateTime?
+  createdAt           DateTime         @default(now())
+
+  @@index([jobCardId])
+  @@map("damage_inspections")
+}
+
+model Photo {
+  id         String    @id @default(uuid())
+  jobCardId  String
+  jobCard    JobCard   @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  type       PhotoType
+  url        String
+  uploadedAt DateTime  @default(now())
+
+  @@index([jobCardId])
+  @@map("photos")
+}
+
+model InventoryItem {
+  id               String   @id @default(uuid())
+  name             String
+  unit             String
+  quantityInStock  Decimal  @db.Decimal(10, 2)
+  reorderLevel     Decimal  @db.Decimal(10, 2)
+
+  usages InventoryUsage[]
+
+  @@map("inventory_items")
+}
+
+model InventoryUsage {
+  id            String        @id @default(uuid())
+  jobCardId     String
+  jobCard       JobCard       @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  itemId        String
+  item          InventoryItem @relation(fields: [itemId], references: [id])
+  quantityUsed  Decimal       @db.Decimal(10, 2)
+  createdAt     DateTime      @default(now())
+
+  @@index([jobCardId])
+  @@index([itemId])
+  @@map("inventory_usages")
+}
+
+model Invoice {
+  id        String        @id @default(uuid())
+  jobCardId String        @unique
+  jobCard   JobCard       @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  subtotal  Decimal       @db.Decimal(10, 2)
+  tax       Decimal       @db.Decimal(10, 2)
+  discount  Decimal       @db.Decimal(10, 2) @default(0)
+  total     Decimal       @db.Decimal(10, 2)
+  status    InvoiceStatus @default(UNPAID)
+  createdAt DateTime      @default(now())
+
+  payments Payment[]
+
+  @@map("invoices")
+}
+
+model Payment {
+  id               String        @id @default(uuid())
+  invoiceId        String
+  invoice          Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  method           PaymentMethod
+  amount           Decimal       @db.Decimal(10, 2)
+  slipUrl          String?
+  status           PaymentStatus @default(PENDING_VERIFICATION)
+  verifiedByUserId String?
+  verifiedByUser   User?         @relation("VerifiedBy", fields: [verifiedByUserId], references: [id])
+  createdAt        DateTime      @default(now())
+
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+model Review {
   id        String   @id @default(uuid())
+  jobCardId String   @unique
+  jobCard   JobCard  @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  rating    Int
+  comment   String?
   createdAt DateTime @default(now())
+
+  @@map("reviews")
+}
+
+model Notification {
+  id         String              @id @default(uuid())
+  customerId String
+  customer   Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type       NotificationType
+  message    String
+  channel    NotificationChannel
+  status     NotificationStatus  @default(PENDING)
+  createdAt  DateTime            @default(now())
+
+  @@index([customerId])
+  @@map("notifications")
 }
