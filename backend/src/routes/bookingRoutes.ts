@@ -17,6 +17,7 @@ const canCreateForCustomer = requireRole(["ADMIN", "MANAGER", "RECEPTIONIST"]);
 router.use(authenticate);
 
 router.get("/availability", validateQuery(availabilityQuerySchema), asyncHandler(controller.availability));
+router.get("/attention", staffOnly, asyncHandler(controller.attention));
 router.get("/", asyncHandler(controller.list));
 router.get("/:id", asyncHandler(controller.get));
 router.get("/:id/activity-log", asyncHandler(controller.activityLog));

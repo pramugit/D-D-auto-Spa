@@ -19,6 +19,16 @@ export const BOOKING_STATUS_TRANSITIONS: Record<BookingStatus, BookingStatus[]> 
   CANCELLED: [],
 };
 
+// Max minutes a booking should sit in a given status before it needs
+// attention. Tune freely; statuses omitted here have no SLA (e.g. READY
+// depends on the customer showing up, not staff pace).
+export const STATUS_SLA_MINUTES: Partial<Record<BookingStatus, number>> = {
+  PENDING: 60,
+  CONFIRMED: 120,
+  IN_PROGRESS: 180,
+  QUALITY_CHECK: 30,
+};
+
 // Who is responsible for a booking while it sits in each status. Purely a
 // display/claim concept — does not gate every transition, only the three
 // specific ones below that Phase B calls out.
@@ -48,6 +58,31 @@ const TRANSITION_REQUIRES_ROLE: Partial<Record<BookingStatus, StaffRole[]>> = {
   READY: ["MANAGER", "ADMIN"], // QUALITY_CHECK -> READY
   COMPLETED: ["RECEPTIONIST", "MANAGER", "ADMIN"], // READY -> COMPLETED
 };
+
+/**
+ * Least-busy-technician auto-assignment: picks the TECHNICIAN with the
+ * fewest currently-active (not COMPLETED/CANCELLED) job cards. Ties break
+ * on whichever technician sorts first — good enough for a starting
+ * suggestion; staff can always override via the existing
+ * PATCH /job-cards/:id/assign-technician endpoint.
+ */
+export async function pickLeastBusyTechnician(): Promise<string | null> {
+  const technicians = await prisma.user.findMany({ where: { role: "TECHNICIAN" }, select: { id: true } });
+  if (technicians.length === 0) return null;
+
+  const activeCounts = await prisma.jobCardTechnician.groupBy({
+    by: ["userId"],
+    where: { jobCard: { status: { notIn: ["COMPLETED", "CANCELLED"] } } },
+    _count: { jobCardId: true },
+  });
+  const countByUserId = new Map(activeCounts.map((c) => [c.userId, c._count.jobCardId]));
+
+  return technicians.reduce((leastBusy, t) => {
+    const count = countByUserId.get(t.id) ?? 0;
+    const leastBusyCount = countByUserId.get(leastBusy) ?? 0;
+    return count < leastBusyCount ? t.id : leastBusy;
+  }, technicians[0].id);
+}
 
 interface BookingLineItem {
   serviceId?: string;
@@ -232,6 +267,12 @@ export async function transitionBookingStatus(
     if (technicians.length === 1) nextOwnerUserId = technicians[0].userId;
   }
 
+  // Auto-suggest (and assign) the least-busy technician when the job card
+  // is first created, so staff aren't required to pick one manually every
+  // time — they can still override via the existing assign-technician
+  // endpoint at any point afterward.
+  const suggestedTechnicianId = nextStatus === "CONFIRMED" ? await pickLeastBusyTechnician() : null;
+
   const updated = await prisma.$transaction(async (tx) => {
     const result = await tx.booking.update({
       where: { id: bookingId },
@@ -251,11 +292,18 @@ export async function transitionBookingStatus(
     });
 
     if (nextStatus === "CONFIRMED") {
-      await tx.jobCard.upsert({
+      const jobCard = await tx.jobCard.upsert({
         where: { bookingId },
         update: {},
         create: { bookingId, status: "CONFIRMED" },
       });
+      if (suggestedTechnicianId) {
+        await tx.jobCardTechnician.upsert({
+          where: { jobCardId_userId: { jobCardId: jobCard.id, userId: suggestedTechnicianId } },
+          update: {},
+          create: { jobCardId: jobCard.id, userId: suggestedTechnicianId },
+        });
+      }
     } else if (booking.jobCard) {
       const jobCardData: { status: BookingStatus; startedAt?: Date; completedAt?: Date } = {
         status: nextStatus,
@@ -342,4 +390,66 @@ export async function getStatusEnteredAt(bookingId: string): Promise<Date> {
   if (latest) return latest.createdAt;
   const booking = await prisma.booking.findUnique({ where: { id: bookingId }, select: { createdAt: true } });
   return booking?.createdAt ?? new Date();
+}
+
+export interface AttentionBooking {
+  id: string;
+  status: BookingStatus;
+  currentOwnerRole: StaffRole | null;
+  currentOwnerUserId: string | null;
+  statusEnteredAt: Date;
+  minutesInStatus: number;
+  slaMinutes: number | null;
+  slaBreached: boolean;
+  unassigned: boolean;
+  customer: { id: string; name: string };
+  vehicle: { id: string; plateNumber: string; make: string; model: string };
+}
+
+/**
+ * Read-only computed query — no background job. A booking needs
+ * attention if it has sat in its current status past that status's SLA,
+ * or if it has no owner despite being past PENDING (CONFIRMED or later,
+ * excluding the terminal COMPLETED/CANCELLED statuses this query already
+ * excludes). Compares getStatusEnteredAt() against now for each active
+ * booking.
+ */
+export async function getBookingsNeedingAttention(): Promise<AttentionBooking[]> {
+  const activeBookings = await prisma.booking.findMany({
+    where: { status: { notIn: ["COMPLETED", "CANCELLED"] } },
+    include: {
+      customer: { select: { id: true, name: true } },
+      vehicle: { select: { id: true, plateNumber: true, make: true, model: true } },
+    },
+    orderBy: { scheduledAt: "asc" },
+  });
+
+  const now = Date.now();
+  const results: AttentionBooking[] = [];
+
+  for (const booking of activeBookings) {
+    const statusEnteredAt = await getStatusEnteredAt(booking.id);
+    const minutesInStatus = Math.round((now - statusEnteredAt.getTime()) / 60000);
+    const slaMinutes = STATUS_SLA_MINUTES[booking.status] ?? null;
+    const slaBreached = slaMinutes !== null && minutesInStatus > slaMinutes;
+    const unassigned = booking.status !== "PENDING" && !booking.currentOwnerUserId;
+
+    if (slaBreached || unassigned) {
+      results.push({
+        id: booking.id,
+        status: booking.status,
+        currentOwnerRole: getCurrentOwnerRole(booking.status),
+        currentOwnerUserId: booking.currentOwnerUserId,
+        statusEnteredAt,
+        minutesInStatus,
+        slaMinutes,
+        slaBreached,
+        unassigned,
+        customer: booking.customer,
+        vehicle: booking.vehicle,
+      });
+    }
+  }
+
+  return results;
 }

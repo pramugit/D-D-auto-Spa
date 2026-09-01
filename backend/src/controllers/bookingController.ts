@@ -7,6 +7,7 @@ import {
   createBooking,
   getAvailability,
   getBookingActivityLog,
+  getBookingsNeedingAttention,
   getCurrentOwnerRole,
   transitionBookingStatus,
 } from "../services/bookingService";
@@ -88,6 +89,11 @@ export async function availability(req: Request, res: Response) {
   }).validatedQuery;
   const result = await getAvailability(date, durationMinutes);
   res.json(result);
+}
+
+export async function attention(_req: Request, res: Response) {
+  const bookings = await getBookingsNeedingAttention();
+  res.json(bookings);
 }
 
 export async function updateStatus(req: Request, res: Response) {
