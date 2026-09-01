@@ -37,3 +37,13 @@ export async function repeatCustomers(_req: Request, res: Response) {
   const data = await reportService.getRepeatCustomerRate();
   res.json(data);
 }
+
+export async function profit(req: Request, res: Response) {
+  const { from, to } = parseDateRange(req);
+  const [overTime, byCategory, byTechnician] = await Promise.all([
+    reportService.getProfitOverTime(from, to),
+    reportService.getProfitByCategory(from, to),
+    reportService.getProfitByTechnician(from, to),
+  ]);
+  res.json({ overTime, byCategory, byTechnician });
+}

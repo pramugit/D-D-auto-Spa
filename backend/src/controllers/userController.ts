@@ -3,7 +3,15 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../utils/prisma";
 import { AppError } from "../utils/AppError";
 
-const publicSelect = { id: true, name: true, email: true, phone: true, role: true, createdAt: true };
+const publicSelect = {
+  id: true,
+  name: true,
+  email: true,
+  phone: true,
+  role: true,
+  hourlyRate: true,
+  createdAt: true,
+};
 
 export async function list(_req: Request, res: Response) {
   const users = await prisma.user.findMany({ select: publicSelect, orderBy: { name: "asc" } });

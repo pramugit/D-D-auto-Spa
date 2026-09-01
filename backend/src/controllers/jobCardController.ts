@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { prisma } from "../utils/prisma";
 import { AppError } from "../utils/AppError";
 import { safeCustomerSelect } from "../utils/prismaSelects";
+import { calculateJobCardProfit } from "../services/profitService";
 
 const jobCardInclude = {
   booking: {
@@ -71,6 +72,11 @@ export async function createDamageInspection(req: Request, res: Response) {
     },
   });
   res.status(201).json(inspection);
+}
+
+export async function profit(req: Request, res: Response) {
+  const breakdown = await calculateJobCardProfit(req.params.id);
+  res.json(breakdown);
 }
 
 export async function uploadPhoto(req: Request, res: Response) {

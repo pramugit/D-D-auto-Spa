@@ -174,6 +174,7 @@ export const createInventoryItemSchema = z.object({
   unit: z.string().min(1),
   quantityInStock: z.number().nonnegative(),
   reorderLevel: z.number().nonnegative(),
+  costPerUnit: z.number().nonnegative().optional(),
 });
 
 export const updateInventoryItemSchema = createInventoryItemSchema.partial();
@@ -198,11 +199,14 @@ export const createNotificationSchema = z.object({
   channel: notificationChannelEnum,
 });
 
-export const createUserSchema = registerStaffSchema;
+export const createUserSchema = registerStaffSchema.extend({
+  hourlyRate: z.number().nonnegative().optional(),
+});
 export const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
   email: z.string().email().optional(),
   phone: z.string().min(1).optional(),
   role: staffRoleEnum.optional(),
   password: z.string().min(8).optional(),
+  hourlyRate: z.number().nonnegative().nullable().optional(),
 });

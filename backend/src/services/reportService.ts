@@ -1,5 +1,7 @@
 import { prisma } from "../utils/prisma";
 import { BUSINESS_END_HOUR, BUSINESS_START_HOUR, bookingDurationMinutes } from "./bookingService";
+import { calculateJobCardProfit, round2 } from "./profitService";
+import type { ServiceCategoryName } from "@prisma/client";
 
 export type RevenueGranularity = "daily" | "weekly" | "monthly";
 
@@ -140,6 +142,118 @@ export async function getBayUtilization(from: Date, to: Date) {
   }
 
   return results;
+}
+
+/** Job card ids whose invoice was generated within [from, to]. */
+async function getJobCardIdsInvoicedInRange(from?: Date, to?: Date): Promise<string[]> {
+  const invoices = await prisma.invoice.findMany({
+    where: { createdAt: { gte: from, lte: to } },
+    select: { jobCardId: true },
+  });
+  return invoices.map((i) => i.jobCardId);
+}
+
+/** Total profit across every invoiced job card in a date range. */
+export async function getProfitOverTime(from?: Date, to?: Date) {
+  const jobCardIds = await getJobCardIdsInvoicedInRange(from, to);
+  let totalRevenue = 0;
+  let totalMaterialCost = 0;
+  let totalLaborCost = 0;
+  let totalProfit = 0;
+
+  for (const jobCardId of jobCardIds) {
+    const breakdown = await calculateJobCardProfit(jobCardId);
+    totalRevenue += breakdown.revenue;
+    totalMaterialCost += breakdown.materialCost;
+    totalLaborCost += breakdown.laborCost;
+    totalProfit += breakdown.profit;
+  }
+
+  return {
+    jobCardCount: jobCardIds.length,
+    revenue: round2(totalRevenue),
+    materialCost: round2(totalMaterialCost),
+    laborCost: round2(totalLaborCost),
+    profit: round2(totalProfit),
+  };
+}
+
+/**
+ * How much of a booking's line-item revenue falls in each category. A
+ * package's price is split evenly across the categories of its
+ * constituent services (e.g. a package with 2 exterior + 1 interior
+ * service allocates 2/3 of its price to EXTERIOR). Used to apportion a
+ * job card's profit across categories proportionally to revenue share,
+ * since costs aren't tracked per category in this data model.
+ */
+async function getCategoryRevenueShares(bookingId: string): Promise<Record<ServiceCategoryName, number>> {
+  const items = await prisma.bookingService.findMany({
+    where: { bookingId },
+    include: {
+      service: { include: { category: true } },
+      package: { include: { services: { include: { service: { include: { category: true } } } } } },
+    },
+  });
+
+  const shares: Record<ServiceCategoryName, number> = { EXTERIOR: 0, INTERIOR: 0 };
+  for (const item of items) {
+    const price = Number(item.price);
+    if (item.service) {
+      shares[item.service.category.name] += price;
+    } else if (item.package && item.package.services.length > 0) {
+      const perService = price / item.package.services.length;
+      for (const link of item.package.services) {
+        shares[link.service.category.name] += perService;
+      }
+    }
+  }
+  return shares;
+}
+
+/** Profit apportioned by service category (EXTERIOR vs INTERIOR), over a date range. */
+export async function getProfitByCategory(from?: Date, to?: Date) {
+  const jobCardIds = await getJobCardIdsInvoicedInRange(from, to);
+  const jobCards = await prisma.jobCard.findMany({
+    where: { id: { in: jobCardIds } },
+    select: { id: true, bookingId: true },
+  });
+
+  const totals: Record<ServiceCategoryName, number> = { EXTERIOR: 0, INTERIOR: 0 };
+  for (const jc of jobCards) {
+    const breakdown = await calculateJobCardProfit(jc.id);
+    const shares = await getCategoryRevenueShares(jc.bookingId);
+    const totalShare = shares.EXTERIOR + shares.INTERIOR;
+    if (totalShare === 0) continue;
+    totals.EXTERIOR += breakdown.profit * (shares.EXTERIOR / totalShare);
+    totals.INTERIOR += breakdown.profit * (shares.INTERIOR / totalShare);
+  }
+
+  return { EXTERIOR: round2(totals.EXTERIOR), INTERIOR: round2(totals.INTERIOR) };
+}
+
+/** Profit split evenly among a job card's assigned technicians, summed per technician, over a date range. */
+export async function getProfitByTechnician(from?: Date, to?: Date) {
+  const jobCardIds = await getJobCardIdsInvoicedInRange(from, to);
+  const jobCards = await prisma.jobCard.findMany({
+    where: { id: { in: jobCardIds } },
+    select: { id: true, technicians: { select: { userId: true, user: { select: { name: true } } } } },
+  });
+
+  const totals = new Map<string, { name: string; profit: number }>();
+  for (const jc of jobCards) {
+    if (jc.technicians.length === 0) continue;
+    const breakdown = await calculateJobCardProfit(jc.id);
+    const share = breakdown.profit / jc.technicians.length;
+    for (const t of jc.technicians) {
+      const existing = totals.get(t.userId) ?? { name: t.user.name, profit: 0 };
+      existing.profit += share;
+      totals.set(t.userId, existing);
+    }
+  }
+
+  return Array.from(totals.entries())
+    .map(([technicianId, v]) => ({ technicianId, name: v.name, profit: round2(v.profit) }))
+    .sort((a, b) => b.profit - a.profit);
 }
 
 /** Fraction of customers with more than one booking. */

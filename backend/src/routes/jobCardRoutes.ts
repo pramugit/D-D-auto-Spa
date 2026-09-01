@@ -59,4 +59,7 @@ router.post(
   asyncHandler(inventoryController.recordUsage)
 );
 
+// Profit is financially sensitive — manager/admin only.
+router.get("/:id/profit", requireRole(["ADMIN", "MANAGER"]), asyncHandler(controller.profit));
+
 export default router;
