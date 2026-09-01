@@ -1,29 +1,40 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import type { StaffRole } from "../api/types";
+import { PERMISSIONS, type PermissionSection } from "../config/permissions";
 
 interface NavItem {
   to: string;
   label: string;
-  roles?: StaffRole[];
+  section?: PermissionSection;
+  // Only for the one nav item ("Reports") that isn't part of the
+  // permissions matrix's 8 sections — an explicit admin-only exception,
+  // same as its backend route.
+  rolesOverride?: StaffRole[];
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: "/bookings", label: "Bookings" },
-  { to: "/job-board", label: "Job Board" },
-  { to: "/customers", label: "Customers" },
-  { to: "/catalog", label: "Service Catalog", roles: ["ADMIN", "MANAGER"] },
-  { to: "/invoices", label: "Invoices & Payments", roles: ["ADMIN", "MANAGER", "RECEPTIONIST"] },
-  { to: "/inventory", label: "Inventory" },
-  { to: "/reports", label: "Reports", roles: ["ADMIN"] },
-  { to: "/ops-dashboard", label: "Ops Dashboard", roles: ["ADMIN", "MANAGER"] },
-  { to: "/users", label: "Staff", roles: ["ADMIN"] },
+  { to: "/bookings", label: PERMISSIONS.bookings.label, section: "bookings" },
+  { to: "/job-board", label: PERMISSIONS.jobBoard.label, section: "jobBoard" },
+  { to: "/customers", label: PERMISSIONS.customersVehicles.label, section: "customersVehicles" },
+  { to: "/catalog", label: PERMISSIONS.serviceCatalog.label, section: "serviceCatalog" },
+  { to: "/invoices", label: PERMISSIONS.invoicesPayments.label, section: "invoicesPayments" },
+  { to: "/inventory", label: PERMISSIONS.inventory.label, section: "inventory" },
+  { to: "/reports", label: "Reports", rolesOverride: ["ADMIN"] },
+  { to: "/ops-dashboard", label: PERMISSIONS.opsDashboard.label, section: "opsDashboard" },
+  { to: "/users", label: PERMISSIONS.staff.label, section: "staff" },
 ];
+
+function isVisible(item: NavItem, role: StaffRole): boolean {
+  if (item.rolesOverride) return item.rolesOverride.includes(role);
+  if (item.section) return PERMISSIONS[item.section].view.includes(role);
+  return true;
+}
 
 export function AppLayout() {
   const { user, logout } = useAuth();
 
-  const visibleItems = NAV_ITEMS.filter((item) => !item.roles || (user && item.roles.includes(user.role)));
+  const visibleItems = user ? NAV_ITEMS.filter((item) => isVisible(item, user.role)) : [];
 
   return (
     <div className="flex min-h-screen bg-slate-50">

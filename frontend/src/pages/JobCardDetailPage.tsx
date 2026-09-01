@@ -20,13 +20,16 @@ import { StatusBadge } from "../components/StatusBadge";
 import { CarDiagram } from "../components/CarDiagram";
 import { ActivityTimeline } from "../components/ActivityTimeline";
 import { useAuth } from "../hooks/useAuth";
+import { canEdit } from "../config/permissions";
+
+type TechnicianSummary = Pick<StaffUser, "id" | "name" | "email" | "role">;
 
 export function JobCardDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [jobCard, setJobCard] = useState<JobCard | null>(null);
-  const [technicians, setTechnicians] = useState<StaffUser[]>([]);
+  const [technicians, setTechnicians] = useState<TechnicianSummary[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [activityLog, setActivityLog] = useState<BookingActivityLogEntry[]>([]);
   const [needsAttention, setNeedsAttention] = useState(false);
@@ -40,13 +43,13 @@ export function JobCardDetailPage() {
     if (!id) return;
     setError(null);
     try {
-      const [jc, users, items] = await Promise.all([
+      const [jc, techs, items] = await Promise.all([
         jobCardsApi.getJobCard(id),
-        usersApi.listUsers(),
+        usersApi.listTechnicians(),
         inventoryApi.listInventoryItems(),
       ]);
       setJobCard(jc);
-      setTechnicians(users.filter((u) => u.role === "TECHNICIAN"));
+      setTechnicians(techs);
       setInventoryItems(items);
 
       const [log, attention] = await Promise.all([
@@ -74,7 +77,13 @@ export function JobCardDetailPage() {
 
   const preInspection = jobCard.damageInspections.find((d) => d.stage === "PRE_SERVICE");
   const postInspection = jobCard.damageInspections.find((d) => d.stage === "POST_SERVICE");
-  const canManage = user && ["ADMIN", "MANAGER", "RECEPTIONIST"].includes(user.role);
+  // Technician assignment, damage inspection, and photos are Job Board
+  // edit actions; generating an invoice is an Invoices & Payments one —
+  // two different sections, so two different checks (previously a
+  // single canManage that incorrectly excluded TECHNICIAN and included
+  // RECEPTIONIST for the Job Board actions).
+  const canEditJobBoard = user && canEdit(user.role, "jobBoard");
+  const canEditInvoices = user && canEdit(user.role, "invoicesPayments");
   const owner = jobCard.booking.currentOwner;
   const ownerRole = jobCard.booking.currentOwnerRole;
 
@@ -202,7 +211,7 @@ export function JobCardDetailPage() {
         <TechnicianAssignment
           technicians={technicians}
           assignedIds={jobCard.technicians.map((t) => t.userId)}
-          disabled={!canManage}
+          disabled={!canEditJobBoard}
           onAssign={handleAssign}
         />
       </div>
@@ -228,8 +237,10 @@ export function JobCardDetailPage() {
                   )}
                 </div>
               </>
-            ) : (
+            ) : canEditJobBoard ? (
               <DamageInspectionEditor onSave={(markings) => handleSaveInspection("PRE_SERVICE", markings)} />
+            ) : (
+              <div className="text-sm text-slate-400">No pre-service inspection recorded.</div>
             )}
           </div>
           <div>
@@ -250,7 +261,7 @@ export function JobCardDetailPage() {
                   )}
                 </div>
               </>
-            ) : preInspection ? (
+            ) : preInspection && canEditJobBoard ? (
               <DamageInspectionEditor onSave={(markings) => handleSaveInspection("POST_SERVICE", markings)} />
             ) : (
               <div className="text-sm text-slate-400">Complete the pre-service inspection first.</div>
@@ -260,8 +271,8 @@ export function JobCardDetailPage() {
       </div>
 
       <div className="mb-6 grid gap-6 md:grid-cols-2">
-        <PhotoSection jobCard={jobCard} onUpload={handlePhotoUpload} />
-        <InventoryUsageSection items={inventoryItems} onUse={handleInventoryUsage} />
+        <PhotoSection jobCard={jobCard} onUpload={handlePhotoUpload} canEdit={!!canEditJobBoard} />
+        <InventoryUsageSection items={inventoryItems} onUse={handleInventoryUsage} canEdit={!!canEditJobBoard} />
       </div>
 
       <div className="mb-6 grid gap-6 md:grid-cols-2">
@@ -271,7 +282,7 @@ export function JobCardDetailPage() {
             <Link to={`/invoices/${jobCard.invoice.id}`} className="text-sm text-slate-700 hover:underline">
               View invoice — ${jobCard.invoice.total} ({jobCard.invoice.status})
             </Link>
-          ) : canManage ? (
+          ) : canEditInvoices ? (
             <button
               onClick={handleCreateInvoice}
               className="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
@@ -328,7 +339,7 @@ function TechnicianAssignment({
   disabled,
   onAssign,
 }: {
-  technicians: StaffUser[];
+  technicians: TechnicianSummary[];
   assignedIds: string[];
   disabled?: boolean;
   onAssign: (ids: string[]) => void;
@@ -380,9 +391,11 @@ function TechnicianAssignment({
 function PhotoSection({
   jobCard,
   onUpload,
+  canEdit,
 }: {
   jobCard: JobCard;
   onUpload: (file: File, type: PhotoType) => void;
+  canEdit: boolean;
 }) {
   const before = jobCard.photos.filter((p) => p.type === "BEFORE");
   const after = jobCard.photos.filter((p) => p.type === "AFTER");
@@ -391,8 +404,8 @@ function PhotoSection({
     <div className="rounded-lg border border-slate-200 bg-white p-5">
       <h2 className="mb-3 text-sm font-semibold uppercase text-slate-500">Photos</h2>
       <div className="grid grid-cols-2 gap-3">
-        <PhotoUploadColumn label="Before" photos={before} onUpload={(f) => onUpload(f, "BEFORE")} />
-        <PhotoUploadColumn label="After" photos={after} onUpload={(f) => onUpload(f, "AFTER")} />
+        <PhotoUploadColumn label="Before" photos={before} onUpload={(f) => onUpload(f, "BEFORE")} canEdit={canEdit} />
+        <PhotoUploadColumn label="After" photos={after} onUpload={(f) => onUpload(f, "AFTER")} canEdit={canEdit} />
       </div>
     </div>
   );
@@ -402,10 +415,12 @@ function PhotoUploadColumn({
   label,
   photos,
   onUpload,
+  canEdit,
 }: {
   label: string;
   photos: { id: string; url: string }[];
   onUpload: (file: File) => void;
+  canEdit: boolean;
 }) {
   return (
     <div>
@@ -417,16 +432,18 @@ function PhotoUploadColumn({
           </a>
         ))}
       </div>
-      <input
-        type="file"
-        accept="image/*"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) onUpload(file);
-          e.target.value = "";
-        }}
-        className="w-full text-xs"
-      />
+      {canEdit && (
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) onUpload(file);
+            e.target.value = "";
+          }}
+          className="w-full text-xs"
+        />
+      )}
     </div>
   );
 }
@@ -467,9 +484,11 @@ function DamageInspectionEditor({ onSave }: { onSave: (markings: DamageMarking[]
 function InventoryUsageSection({
   items,
   onUse,
+  canEdit,
 }: {
   items: InventoryItem[];
   onUse: (itemId: string, quantity: number) => void;
+  canEdit: boolean;
 }) {
   const [itemId, setItemId] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -477,35 +496,39 @@ function InventoryUsageSection({
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5">
       <h2 className="mb-3 text-sm font-semibold uppercase text-slate-500">Inventory Used</h2>
-      <div className="flex gap-2">
-        <select
-          value={itemId}
-          onChange={(e) => setItemId(e.target.value)}
-          className="flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-        >
-          <option value="">Select item...</option>
-          {items.map((i) => (
-            <option key={i.id} value={i.id}>
-              {i.name} ({i.quantityInStock} {i.unit} left)
-            </option>
-          ))}
-        </select>
-        <input
-          type="number"
-          min={0.01}
-          step="0.01"
-          value={quantity}
-          onChange={(e) => setQuantity(Number(e.target.value))}
-          className="w-20 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-        />
-        <button
-          onClick={() => itemId && onUse(itemId, quantity)}
-          disabled={!itemId}
-          className="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
-        >
-          Use
-        </button>
-      </div>
+      {canEdit ? (
+        <div className="flex gap-2">
+          <select
+            value={itemId}
+            onChange={(e) => setItemId(e.target.value)}
+            className="flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+          >
+            <option value="">Select item...</option>
+            {items.map((i) => (
+              <option key={i.id} value={i.id}>
+                {i.name} ({i.quantityInStock} {i.unit} left)
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            min={0.01}
+            step="0.01"
+            value={quantity}
+            onChange={(e) => setQuantity(Number(e.target.value))}
+            className="w-20 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+          />
+          <button
+            onClick={() => itemId && onUse(itemId, quantity)}
+            disabled={!itemId}
+            className="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+          >
+            Use
+          </button>
+        </div>
+      ) : (
+        <div className="text-sm text-slate-400">View only.</div>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { AppError } from "../utils/AppError";
 import type { BookingStatus, NotificationChannel, NotificationType, StaffRole } from "@prisma/client";
 import { createAndSendNotification } from "./notificationService";
 import { safeCustomerSelect } from "../utils/prismaSelects";
+import { PERMISSIONS } from "../config/permissions";
 
 export const BUSINESS_START_HOUR = 9;
 export const BUSINESS_END_HOUR = 17;
@@ -74,15 +75,24 @@ export function getCurrentOwnerRole(status: BookingStatus): StaffRole | null {
   return OWNER_ROLE_BY_STATUS[status];
 }
 
-// The three transitions Phase B calls out as needing enforced, on-record
-// responsibility, keyed by the destination status. ADMIN can always
-// perform any transition (existing pattern throughout this codebase).
-// Not applied when actor.role is omitted — the invoice-triggered
-// auto-completion of READY->COMPLETED is a system consequence of full
-// payment, not a specific staff member acting out of turn, so it
-// intentionally bypasses this check (see transitionBookingStatus).
+// Per-destination-status role requirements, keyed by the destination
+// status. ADMIN can always perform any transition (existing pattern
+// throughout this codebase). Not applied when actor.role is omitted —
+// the invoice-triggered auto-completion of READY->COMPLETED is a system
+// consequence of full payment, not a specific staff member acting out
+// of turn, so it intentionally bypasses this check (see
+// transitionBookingStatus).
+//
+// CONFIRMED/READY/COMPLETED are Bookings-section actions (confirming,
+// approving quality, closing out) — Phase B's original three. IN_PROGRESS
+// and QUALITY_CHECK are pure Job Board Kanban actions, so those two are
+// sourced straight from the single permissions matrix's jobBoard.edit
+// list (which excludes RECEPTIONIST, matching their read-only Job Board
+// access) instead of a separately hand-maintained array.
 const TRANSITION_REQUIRES_ROLE: Partial<Record<BookingStatus, StaffRole[]>> = {
   CONFIRMED: ["RECEPTIONIST", "MANAGER", "ADMIN"], // PENDING -> CONFIRMED
+  IN_PROGRESS: PERMISSIONS.jobBoard.edit, // CONFIRMED -> IN_PROGRESS
+  QUALITY_CHECK: PERMISSIONS.jobBoard.edit, // IN_PROGRESS -> QUALITY_CHECK
   READY: ["MANAGER", "ADMIN"], // QUALITY_CHECK -> READY
   COMPLETED: ["RECEPTIONIST", "MANAGER", "ADMIN"], // READY -> COMPLETED
 };

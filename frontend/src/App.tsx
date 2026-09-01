@@ -21,6 +21,12 @@ import { PortalLoginPage } from "./pages/portal/PortalLoginPage";
 import { PortalBookPage } from "./pages/portal/PortalBookPage";
 import { PortalBookingsPage } from "./pages/portal/PortalBookingsPage";
 import { PortalBookingDetailPage } from "./pages/portal/PortalBookingDetailPage";
+import { PERMISSIONS } from "./config/permissions";
+
+// Job Board is the one section every staff role can view, so it's the
+// universal landing page/fallback (Bookings isn't — TECHNICIAN can't
+// see it).
+const DEFAULT_ROUTE = "/job-board";
 
 function App() {
   return (
@@ -37,16 +43,37 @@ function App() {
                 </ProtectedRoute>
               }
             >
-              <Route path="/" element={<Navigate to="/bookings" replace />} />
-              <Route path="/bookings" element={<BookingsPage />} />
+              <Route path="/" element={<Navigate to={DEFAULT_ROUTE} replace />} />
+              <Route
+                path="/bookings"
+                element={
+                  <ProtectedRoute roles={PERMISSIONS.bookings.view}>
+                    <BookingsPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/job-board" element={<JobBoardPage />} />
               <Route path="/job-cards/:id" element={<JobCardDetailPage />} />
-              <Route path="/customers" element={<CustomersPage />} />
-              <Route path="/customers/:id" element={<CustomerDetailPage />} />
+              <Route
+                path="/customers"
+                element={
+                  <ProtectedRoute roles={PERMISSIONS.customersVehicles.view}>
+                    <CustomersPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/customers/:id"
+                element={
+                  <ProtectedRoute roles={PERMISSIONS.customersVehicles.view}>
+                    <CustomerDetailPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/catalog"
                 element={
-                  <ProtectedRoute roles={["ADMIN", "MANAGER"]}>
+                  <ProtectedRoute roles={PERMISSIONS.serviceCatalog.view}>
                     <CatalogPage />
                   </ProtectedRoute>
                 }
@@ -54,7 +81,7 @@ function App() {
               <Route
                 path="/invoices"
                 element={
-                  <ProtectedRoute roles={["ADMIN", "MANAGER", "RECEPTIONIST"]}>
+                  <ProtectedRoute roles={PERMISSIONS.invoicesPayments.view}>
                     <InvoicesPage />
                   </ProtectedRoute>
                 }
@@ -62,12 +89,21 @@ function App() {
               <Route
                 path="/invoices/:id"
                 element={
-                  <ProtectedRoute roles={["ADMIN", "MANAGER", "RECEPTIONIST"]}>
+                  <ProtectedRoute roles={PERMISSIONS.invoicesPayments.view}>
                     <InvoicesPage />
                   </ProtectedRoute>
                 }
               />
-              <Route path="/inventory" element={<InventoryPage />} />
+              <Route
+                path="/inventory"
+                element={
+                  <ProtectedRoute roles={PERMISSIONS.inventory.view}>
+                    <InventoryPage />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Reports isn't one of the permissions matrix's 8 sections
+                  — an explicit admin-only page, same as its backend routes. */}
               <Route
                 path="/reports"
                 element={
@@ -79,7 +115,7 @@ function App() {
               <Route
                 path="/users"
                 element={
-                  <ProtectedRoute roles={["ADMIN"]}>
+                  <ProtectedRoute roles={PERMISSIONS.staff.view}>
                     <UsersPage />
                   </ProtectedRoute>
                 }
@@ -87,7 +123,7 @@ function App() {
               <Route
                 path="/ops-dashboard"
                 element={
-                  <ProtectedRoute roles={["ADMIN", "MANAGER"]}>
+                  <ProtectedRoute roles={PERMISSIONS.opsDashboard.view}>
                     <OpsDashboardPage />
                   </ProtectedRoute>
                 }
@@ -109,7 +145,7 @@ function App() {
               <Route path="/portal/bookings/:id" element={<PortalBookingDetailPage />} />
             </Route>
 
-            <Route path="*" element={<Navigate to="/bookings" replace />} />
+            <Route path="*" element={<Navigate to={DEFAULT_ROUTE} replace />} />
           </Routes>
         </CustomerAuthProvider>
       </AuthProvider>

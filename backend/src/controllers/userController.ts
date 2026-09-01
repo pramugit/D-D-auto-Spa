@@ -18,6 +18,24 @@ export async function list(_req: Request, res: Response) {
   res.json(users);
 }
 
+/**
+ * Just id/name/role for TECHNICIAN-role users — the "assign technician"
+ * checklist on a job card needs this regardless of whether the caller
+ * can see the Staff section (a technician assigning/reassigning their
+ * own job, or a receptionist... no, receptionist can't edit Job Board;
+ * but ADMIN/MANAGER/TECHNICIAN all can, and none of that maps cleanly
+ * onto staff.view=[ADMIN,MANAGER]). Kept separate from the full staff
+ * roster endpoint rather than loosening that one's permissions.
+ */
+export async function listTechnicians(_req: Request, res: Response) {
+  const technicians = await prisma.user.findMany({
+    where: { role: "TECHNICIAN" },
+    select: { id: true, name: true, email: true, role: true },
+    orderBy: { name: "asc" },
+  });
+  res.json(technicians);
+}
+
 export async function get(req: Request, res: Response) {
   const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: publicSelect });
   if (!user) throw new AppError(404, "User not found");

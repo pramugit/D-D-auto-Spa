@@ -13,7 +13,7 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   if (isAuthenticated) {
-    const redirectTo = (location.state as { from?: string } | null)?.from ?? "/bookings";
+    const redirectTo = (location.state as { from?: string } | null)?.from ?? "/job-board";
     return <Navigate to={redirectTo} replace />;
   }
 
@@ -23,7 +23,7 @@ export function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate("/bookings", { replace: true });
+      navigate("/job-board", { replace: true });
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {

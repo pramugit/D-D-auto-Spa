@@ -4,6 +4,8 @@ import * as jobCardsApi from "../api/jobCards";
 import * as bookingsApi from "../api/bookings";
 import type { BookingStatus, JobCard } from "../api/types";
 import { apiErrorMessage } from "../api/client";
+import { useAuth } from "../hooks/useAuth";
+import { canEdit } from "../config/permissions";
 
 interface Column {
   status: BookingStatus;
@@ -21,9 +23,11 @@ const COLUMNS: Column[] = [
 ];
 
 export function JobBoardPage() {
+  const { user } = useAuth();
   const [jobCards, setJobCards] = useState<JobCard[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const canAct = user && canEdit(user.role, "jobBoard");
 
   async function load() {
     setError(null);
@@ -78,7 +82,7 @@ export function JobBoardPage() {
                         ? j.technicians.map((t) => t.user.name).join(", ")
                         : "No technician assigned"}
                     </div>
-                    {col.next && (
+                    {col.next && canAct && (
                       <button
                         onClick={() => advance(j, col.next!)}
                         disabled={busyId === j.id}

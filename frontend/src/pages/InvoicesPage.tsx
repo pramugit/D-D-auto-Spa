@@ -114,6 +114,9 @@ function InvoiceDetail({ id }: { id: string }) {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Deliberately stricter than invoicesPayments.edit (which includes
+  // RECEPTIONIST) — verifying a bank transfer is a fraud-prevention
+  // checkpoint, matching PATCH /payments/:id/verify's own explicit rule.
   const canVerify = user && ["ADMIN", "MANAGER"].includes(user.role);
 
   async function load() {

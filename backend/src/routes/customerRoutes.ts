@@ -1,6 +1,7 @@
 import { Router } from "express";
 import * as customerController from "../controllers/customerController";
 import { authenticate, requireRole } from "../middleware/auth";
+import { requireSection } from "../middleware/permissions";
 import { validateBody } from "../middleware/validate";
 import {
   createCustomerSchema,
@@ -11,26 +12,29 @@ import {
 import { asyncHandler } from "../middleware/errorHandler";
 
 const router = Router();
-const canManage = requireRole(["ADMIN", "MANAGER", "RECEPTIONIST"]);
+const canManage = requireSection("customersVehicles", "edit");
 
 router.use(authenticate);
 
-// Staff-only listing (customers reach their own record via /:id, gated
-// in the controller); a bare requireStaff check keeps customer tokens out.
-router.get("/", requireRole(["ADMIN", "MANAGER", "RECEPTIONIST", "TECHNICIAN"]), asyncHandler(customerController.list));
-router.get("/:id", asyncHandler(customerController.get));
+router.get("/", requireSection("customersVehicles", "view"), asyncHandler(customerController.list));
+router.get("/:id", requireSection("customersVehicles", "view"), asyncHandler(customerController.get));
 router.post("/", canManage, validateBody(createCustomerSchema), asyncHandler(customerController.create));
 router.patch("/:id", canManage, validateBody(updateCustomerSchema), asyncHandler(customerController.update));
+// Deleting a customer is a deliberately stricter, ADMIN-only exception
+// beyond the coarse customersVehicles.edit set (which includes MANAGER
+// and RECEPTIONIST) — not derived from the permissions matrix.
 router.delete("/:id", requireRole(["ADMIN"]), asyncHandler(customerController.remove));
 
 router.get("/:id/loyalty", asyncHandler(customerController.getLoyalty));
 
-router.get("/:id/vehicles", asyncHandler(customerController.listVehicles));
+router.get("/:id/vehicles", requireSection("customersVehicles", "view"), asyncHandler(customerController.listVehicles));
 router.post(
   "/:id/vehicles",
   // A customer may add a vehicle to their own record; staff need the
   // canManage role. Ownership for the customer case is enforced in the
-  // controller.
+  // controller. (requireSection already passes customer tokens through,
+  // so this could just be `canManage` directly — kept explicit for
+  // readability since it's the one route customers hit here.)
   (req, res, next) => (req.user?.type === "customer" ? next() : canManage(req, res, next)),
   validateBody(createVehicleSchema),
   asyncHandler(customerController.createVehicle)

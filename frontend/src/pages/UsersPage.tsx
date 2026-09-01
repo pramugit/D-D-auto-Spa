@@ -3,13 +3,17 @@ import * as usersApi from "../api/users";
 import type { StaffRole, StaffUser } from "../api/types";
 import { apiErrorMessage } from "../api/client";
 import { Modal } from "../components/Modal";
+import { useAuth } from "../hooks/useAuth";
+import { canEdit } from "../config/permissions";
 
 const ROLES: StaffRole[] = ["ADMIN", "MANAGER", "TECHNICIAN", "RECEPTIONIST"];
 
 export function UsersPage() {
+  const { user } = useAuth();
   const [users, setUsers] = useState<StaffUser[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const canManage = user && canEdit(user.role, "staff");
 
   async function load() {
     setError(null);
@@ -27,13 +31,18 @@ export function UsersPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-800">Staff</h1>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
-        >
-          + New Staff Member
-        </button>
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-800">Staff</h1>
+          {!canManage && <p className="text-sm text-slate-400">Read-only — only Admins can add or edit staff.</p>}
+        </div>
+        {canManage && (
+          <button
+            onClick={() => setShowCreate(true)}
+            className="rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+          >
+            + New Staff Member
+          </button>
+        )}
       </div>
 
       {error && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
@@ -61,7 +70,7 @@ export function UsersPage() {
         </table>
       </div>
 
-      {showCreate && (
+      {showCreate && canManage && (
         <CreateUserModal
           onClose={() => setShowCreate(false)}
           onCreated={() => {

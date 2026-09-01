@@ -29,16 +29,28 @@ function withOwnerRole<T extends { booking: { status: Booking["status"] } }>(job
 
 export async function list(req: Request, res: Response) {
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
-  const jobCards = await prisma.jobCard.findMany({
-    where: status ? { status: status as never } : undefined,
-    include: jobCardInclude,
-  });
+  const where: Record<string, unknown> = status ? { status } : {};
+
+  // TECHNICIAN sees their own queue only, never the whole shop's — job
+  // cards only ever exist from CONFIRMED onward (created on that
+  // transition), so PENDING bookings are structurally excluded here too.
+  if (req.user?.type === "staff" && req.user.role === "TECHNICIAN") {
+    where.technicians = { some: { userId: req.user.sub } };
+  }
+
+  const jobCards = await prisma.jobCard.findMany({ where, include: jobCardInclude });
   res.json(jobCards.map(withOwnerRole));
 }
 
 export async function get(req: Request, res: Response) {
   const jobCard = await prisma.jobCard.findUnique({ where: { id: req.params.id }, include: jobCardInclude });
   if (!jobCard) throw new AppError(404, "Job card not found");
+
+  if (req.user?.type === "staff" && req.user.role === "TECHNICIAN") {
+    const isAssigned = jobCard.technicians.some((t) => t.userId === req.user!.sub);
+    if (!isAssigned) throw new AppError(403, "Not assigned to this job card");
+  }
+
   res.json(withOwnerRole(jobCard));
 }
 

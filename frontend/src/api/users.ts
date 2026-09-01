@@ -6,6 +6,12 @@ export async function listUsers(): Promise<StaffUser[]> {
   return data;
 }
 
+/** Narrow technician roster for the Job Board "assign technician" checklist. */
+export async function listTechnicians(): Promise<Pick<StaffUser, "id" | "name" | "email" | "role">[]> {
+  const { data } = await apiClient.get("/users/technicians");
+  return data;
+}
+
 export async function createUser(input: {
   name: string;
   email: string;

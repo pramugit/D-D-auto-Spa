@@ -4,13 +4,14 @@ import type { InventoryItem } from "../api/types";
 import { apiErrorMessage } from "../api/client";
 import { Modal } from "../components/Modal";
 import { useAuth } from "../hooks/useAuth";
+import { canEdit } from "../config/permissions";
 
 export function InventoryPage() {
   const { user } = useAuth();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const canManage = user && ["ADMIN", "MANAGER"].includes(user.role);
+  const canManage = user && canEdit(user.role, "inventory");
 
   async function load() {
     setError(null);

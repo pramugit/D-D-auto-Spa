@@ -6,6 +6,8 @@ import type { Booking, BookingStatus, Customer, Service, Vehicle } from "../api/
 import { apiErrorMessage } from "../api/client";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
+import { useAuth } from "../hooks/useAuth";
+import { canEdit } from "../config/permissions";
 
 const STATUS_FILTERS: (BookingStatus | "ALL")[] = [
   "ALL",
@@ -19,11 +21,14 @@ const STATUS_FILTERS: (BookingStatus | "ALL")[] = [
 ];
 
 export function BookingsPage() {
+  const { user } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [filter, setFilter] = useState<BookingStatus | "ALL">("ALL");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const canManage = user && canEdit(user.role, "bookings");
 
   async function load() {
     setLoading(true);
@@ -43,16 +48,31 @@ export function BookingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
+  async function handleTransition(bookingId: string, status: BookingStatus) {
+    setBusyId(bookingId);
+    setError(null);
+    try {
+      await bookingsApi.updateBookingStatus(bookingId, status);
+      await load();
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-slate-800">Bookings</h1>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
-        >
-          + New Booking
-        </button>
+        {canManage && (
+          <button
+            onClick={() => setShowCreate(true)}
+            className="rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+          >
+            + New Booking
+          </button>
+        )}
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -81,18 +101,19 @@ export function BookingsPage() {
               <th className="px-4 py-2">Services</th>
               <th className="px-4 py-2">Bay</th>
               <th className="px-4 py-2">Status</th>
+              {canManage && <th className="px-4 py-2">Actions</th>}
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
                   Loading...
                 </td>
               </tr>
             ) : bookings.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
                   No bookings found.
                 </td>
               </tr>
@@ -111,6 +132,28 @@ export function BookingsPage() {
                   <td className="px-4 py-2">
                     <StatusBadge status={b.status} />
                   </td>
+                  {canManage && (
+                    <td className="px-4 py-2">
+                      {b.status === "PENDING" && (
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => handleTransition(b.id, "CONFIRMED")}
+                            disabled={busyId === b.id}
+                            className="rounded-md bg-slate-800 px-2 py-1 text-xs font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            onClick={() => handleTransition(b.id, "CANCELLED")}
+                            disabled={busyId === b.id}
+                            className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))
             )}
