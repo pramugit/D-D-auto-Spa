@@ -5,6 +5,7 @@ import { apiErrorMessage } from "../api/client";
 import { Modal } from "../components/Modal";
 import { useAuth } from "../hooks/useAuth";
 import { canEdit } from "../config/permissions";
+import { EmailField, NameField, PhoneField } from "../components/FormFields";
 
 const ROLES: StaffRole[] = ["ADMIN", "MANAGER", "TECHNICIAN", "RECEPTIONIST"];
 
@@ -109,33 +110,9 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
   return (
     <Modal title="New Staff Member" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Name</label>
-          <input
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Email</label>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Phone (optional)</label>
-          <input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
+        <NameField label="Name" required value={name} onChange={setName} />
+        <EmailField label="Email" required value={email} onChange={setEmail} />
+        <PhoneField label="Phone (optional)" value={phone} onChange={setPhone} />
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-600">Temporary Password</label>
           <input

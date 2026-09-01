@@ -4,6 +4,7 @@ import * as portalApi from "../../api/portal";
 import type { Service, Vehicle, VehicleType } from "../../api/types";
 import { apiErrorMessage } from "../../api/client";
 import { useCustomerAuth } from "../../hooks/useCustomerAuth";
+import { NameField, PlateNumberField } from "../../components/FormFields";
 
 const VEHICLE_TYPES: VehicleType[] = ["SEDAN", "SUV", "HATCHBACK", "VAN", "PICKUP", "OTHER"];
 
@@ -314,35 +315,20 @@ function AddVehicleForm({
   return (
     <form onSubmit={handleSubmit} className="mt-3 space-y-2 rounded-md border border-slate-200 p-3">
       <div className="grid grid-cols-2 gap-2">
-        <input
-          required
-          placeholder="Make"
-          value={make}
-          onChange={(e) => setMake(e.target.value)}
-          className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-        />
-        <input
-          required
-          placeholder="Model"
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-        />
+        <NameField required value={make} onChange={setMake} placeholder="Make" />
+        <NameField required value={model} onChange={setModel} placeholder="Model" />
         <input
           required
           type="number"
+          min={1900}
+          max={2100}
+          step={1}
           placeholder="Year"
           value={year}
           onChange={(e) => setYear(Number(e.target.value))}
           className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
         />
-        <input
-          required
-          placeholder="Plate Number"
-          value={plateNumber}
-          onChange={(e) => setPlateNumber(e.target.value)}
-          className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-        />
+        <PlateNumberField required value={plateNumber} onChange={setPlateNumber} placeholder="Plate Number" />
         <select
           value={vehicleType}
           onChange={(e) => setVehicleType(e.target.value as VehicleType)}

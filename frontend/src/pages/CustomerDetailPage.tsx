@@ -6,6 +6,7 @@ import { apiErrorMessage } from "../api/client";
 import { Modal } from "../components/Modal";
 import { useAuth } from "../hooks/useAuth";
 import { canEdit } from "../config/permissions";
+import { EmailField, NameField, PhoneField, PlateNumberField } from "../components/FormFields";
 
 const VEHICLE_TYPES: VehicleType[] = ["SEDAN", "SUV", "HATCHBACK", "VAN", "PICKUP", "OTHER"];
 
@@ -195,33 +196,9 @@ function EditCustomerModal({
   return (
     <Modal title="Edit Customer" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Name</label>
-          <input
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Phone</label>
-          <input
-            required
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Email (optional)</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
+        <NameField label="Name" required value={name} onChange={setName} />
+        <PhoneField label="Phone" required value={phone} onChange={setPhone} />
+        <EmailField label="Email (optional)" value={email} onChange={setEmail} />
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-600">Address (optional)</label>
           <input
@@ -286,24 +263,8 @@ function AddVehicleModal({
     <Modal title="Add Vehicle" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Make</label>
-            <input
-              required
-              value={make}
-              onChange={(e) => setMake(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Model</label>
-            <input
-              required
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
+          <NameField label="Make" required value={make} onChange={setMake} />
+          <NameField label="Model" required value={model} onChange={setModel} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -311,20 +272,15 @@ function AddVehicleModal({
             <input
               type="number"
               required
+              min={1900}
+              max={2100}
+              step={1}
               value={year}
               onChange={(e) => setYear(Number(e.target.value))}
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Plate Number</label>
-            <input
-              required
-              value={plateNumber}
-              onChange={(e) => setPlateNumber(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
+          <PlateNumberField label="Plate Number" required value={plateNumber} onChange={setPlateNumber} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

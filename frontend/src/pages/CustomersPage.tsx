@@ -4,6 +4,7 @@ import * as customersApi from "../api/customers";
 import type { Customer } from "../api/types";
 import { apiErrorMessage } from "../api/client";
 import { Modal } from "../components/Modal";
+import { EmailField, NameField, PhoneField } from "../components/FormFields";
 
 export function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -142,33 +143,9 @@ function CreateCustomerModal({ onClose, onCreated }: { onClose: () => void; onCr
   return (
     <Modal title="New Customer" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Name</label>
-          <input
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Phone</label>
-          <input
-            required
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Email (optional)</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
+        <NameField label="Name" required value={name} onChange={setName} />
+        <PhoneField label="Phone" required value={phone} onChange={setPhone} />
+        <EmailField label="Email (optional)" value={email} onChange={setEmail} />
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-600">Address (optional)</label>
           <input

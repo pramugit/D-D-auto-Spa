@@ -1,4 +1,15 @@
 import { z } from "zod";
+import {
+  durationMinutesField,
+  emailField,
+  isoDateTimeField,
+  nameField,
+  optionalEmailField,
+  phoneField,
+  plateNumberField,
+  positiveNumberField,
+  priceField,
+} from "./validators";
 
 export const staffRoleEnum = z.enum(["ADMIN", "MANAGER", "TECHNICIAN", "RECEPTIONIST"]);
 export const vehicleTypeEnum = z.enum(["SEDAN", "SUV", "HATCHBACK", "VAN", "PICKUP", "OTHER"]);
@@ -6,40 +17,40 @@ export const serviceCategoryNameEnum = z.enum(["EXTERIOR", "INTERIOR"]);
 export const bayStatusEnum = z.enum(["AVAILABLE", "OCCUPIED", "MAINTENANCE"]);
 
 export const registerStaffSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-  phone: z.string().min(1).optional(),
+  name: nameField(),
+  email: emailField(),
+  phone: phoneField().optional(),
   password: z.string().min(8),
   role: staffRoleEnum.optional(),
 });
 
 export const loginSchema = z.object({
-  email: z.string().email(),
+  email: emailField(),
   password: z.string().min(1),
 });
 
 export const registerCustomerSchema = z.object({
-  name: z.string().min(1),
-  phone: z.string().min(1),
-  email: z.string().email(),
+  name: nameField(),
+  phone: phoneField(),
+  email: emailField(),
   password: z.string().min(8),
   address: z.string().optional(),
 });
 
 export const createCustomerSchema = z.object({
-  name: z.string().min(1),
-  phone: z.string().min(1),
-  email: z.string().email().optional(),
+  name: nameField(),
+  phone: phoneField(),
+  email: optionalEmailField(),
   address: z.string().optional(),
 });
 
 export const updateCustomerSchema = createCustomerSchema.partial();
 
 export const createVehicleSchema = z.object({
-  make: z.string().min(1),
-  model: z.string().min(1),
+  make: nameField(),
+  model: nameField(),
   year: z.number().int().min(1900).max(2100),
-  plateNumber: z.string().min(1),
+  plateNumber: plateNumberField(),
   color: z.string().optional(),
   vehicleType: vehicleTypeEnum,
 });
@@ -50,16 +61,21 @@ export const createServiceCategorySchema = z.object({
   name: serviceCategoryNameEnum,
 });
 
+// Service/package names are product names, not person/vehicle names —
+// deliberately NOT run through nameField() (which would reject "Seat &
+// Carpet Shampoo"-style names containing "&" or digits). Phase E's name-
+// formatting rule is scoped to customer name, staff name, and vehicle
+// make/model only.
 export const servicePricingSchema = z.object({
   vehicleType: vehicleTypeEnum,
-  price: z.number().nonnegative(),
+  price: priceField(),
 });
 
 export const createServiceSchema = z.object({
   categoryId: z.string().uuid(),
   name: z.string().min(1),
   description: z.string().optional(),
-  durationMinutes: z.number().int().positive(),
+  durationMinutes: durationMinutesField(),
   active: z.boolean().optional(),
   pricing: z.array(servicePricingSchema).min(1),
 });
@@ -68,7 +84,7 @@ export const updateServiceSchema = z.object({
   categoryId: z.string().uuid().optional(),
   name: z.string().min(1).optional(),
   description: z.string().optional(),
-  durationMinutes: z.number().int().positive().optional(),
+  durationMinutes: durationMinutesField().optional(),
   active: z.boolean().optional(),
   pricing: z.array(servicePricingSchema).optional(),
 });
@@ -76,7 +92,7 @@ export const updateServiceSchema = z.object({
 export const createServicePackageSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
-  discountedPrice: z.number().nonnegative(),
+  discountedPrice: priceField(),
   serviceIds: z.array(z.string().uuid()).min(1),
   active: z.boolean().optional(),
 });
@@ -115,7 +131,7 @@ const bookingLineItemSchema = z
 export const createBookingSchema = z.object({
   customerId: z.string().uuid().optional(), // required for staff callers, ignored for customer callers
   vehicleId: z.string().uuid(),
-  scheduledAt: z.coerce.date(),
+  scheduledAt: isoDateTimeField(),
   items: z.array(bookingLineItemSchema).min(1),
 });
 
@@ -157,7 +173,7 @@ export const paymentStatusEnum = z.enum(["PENDING_VERIFICATION", "VERIFIED", "RE
 
 export const createInvoiceSchema = z.object({
   taxRate: z.number().min(0).max(1).optional(), // fraction, e.g. 0.08 for 8%
-  discount: z.number().nonnegative().optional(),
+  discount: priceField().optional(),
 });
 
 export const createPaymentSchema = z.object({
@@ -172,16 +188,16 @@ export const verifyPaymentSchema = z.object({
 export const createInventoryItemSchema = z.object({
   name: z.string().min(1),
   unit: z.string().min(1),
-  quantityInStock: z.number().nonnegative(),
-  reorderLevel: z.number().nonnegative(),
-  costPerUnit: z.number().nonnegative().optional(),
+  quantityInStock: priceField(),
+  reorderLevel: priceField(),
+  costPerUnit: priceField().optional(),
 });
 
 export const updateInventoryItemSchema = createInventoryItemSchema.partial();
 
 export const createInventoryUsageSchema = z.object({
   itemId: z.string().uuid(),
-  quantityUsed: z.number().positive(),
+  quantityUsed: positiveNumberField(),
 });
 
 export const createReviewSchema = z.object({
@@ -189,8 +205,16 @@ export const createReviewSchema = z.object({
   comment: z.string().optional(),
 });
 
-export const notificationTypeEnum = z.enum(["BOOKING_CONFIRMED", "JOB_READY", "PAYMENT_VERIFIED", "GENERAL"]);
-export const notificationChannelEnum = z.enum(["SMS", "EMAIL"]);
+export const notificationTypeEnum = z.enum([
+  "BOOKING_CONFIRMED",
+  "JOB_STARTED",
+  "JOB_READY",
+  "JOB_COMPLETED",
+  "BOOKING_CANCELLED",
+  "PAYMENT_VERIFIED",
+  "GENERAL",
+]);
+export const notificationChannelEnum = z.enum(["SMS", "EMAIL", "WHATSAPP"]);
 
 export const createNotificationSchema = z.object({
   customerId: z.string().uuid(),
@@ -200,13 +224,13 @@ export const createNotificationSchema = z.object({
 });
 
 export const createUserSchema = registerStaffSchema.extend({
-  hourlyRate: z.number().nonnegative().optional(),
+  hourlyRate: priceField().optional(),
 });
 export const updateUserSchema = z.object({
-  name: z.string().min(1).optional(),
-  email: z.string().email().optional(),
-  phone: z.string().min(1).optional(),
+  name: nameField().optional(),
+  email: emailField().optional(),
+  phone: phoneField().optional(),
   role: staffRoleEnum.optional(),
   password: z.string().min(8).optional(),
-  hourlyRate: z.number().nonnegative().nullable().optional(),
+  hourlyRate: priceField().nullable().optional(),
 });

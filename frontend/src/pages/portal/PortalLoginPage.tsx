@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useCustomerAuth } from "../../hooks/useCustomerAuth";
 import { apiErrorMessage } from "../../api/client";
+import { EmailField, NameField, PhoneField } from "../../components/FormFields";
 
 export function PortalLoginPage() {
   const { login, register, isAuthenticated } = useCustomerAuth();
@@ -44,36 +45,11 @@ export function PortalLoginPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {mode === "register" && (
             <>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">Name</label>
-                <input
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">Phone</label>
-                <input
-                  required
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
+              <NameField label="Name" required value={name} onChange={setName} />
+              <PhoneField label="Phone" required value={phone} onChange={setPhone} />
             </>
           )}
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
+          <EmailField label="Email" required value={email} onChange={setEmail} />
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-600">Password</label>
             <input
