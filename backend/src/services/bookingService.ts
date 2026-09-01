@@ -1,6 +1,6 @@
 import { prisma } from "../utils/prisma";
 import { AppError } from "../utils/AppError";
-import type { BookingStatus, StaffRole } from "@prisma/client";
+import type { BookingStatus, NotificationChannel, NotificationType, StaffRole } from "@prisma/client";
 import { createAndSendNotification } from "./notificationService";
 import { safeCustomerSelect } from "../utils/prismaSelects";
 
@@ -8,6 +8,34 @@ export const BUSINESS_START_HOUR = 9;
 export const BUSINESS_END_HOUR = 17;
 const SLOT_GRANULARITY_MINUTES = 30;
 const DEFAULT_SERVICE_DURATION_MINUTES = 60;
+
+// Every status transition the customer needs to hear about. Statuses
+// omitted here (QUALITY_CHECK is internal staff work) fire no
+// notification.
+const CUSTOMER_NOTIFICATION_BY_STATUS: Partial<
+  Record<BookingStatus, { type: NotificationType; message: string; channel: NotificationChannel }>
+> = {
+  CONFIRMED: {
+    type: "BOOKING_CONFIRMED",
+    message: "Your booking has been confirmed. We look forward to seeing you!",
+    channel: "EMAIL",
+  },
+  IN_PROGRESS: {
+    type: "JOB_STARTED",
+    message: "Work on your vehicle has started.",
+    channel: "SMS",
+  },
+  READY: {
+    type: "JOB_READY",
+    message: "Your vehicle is ready for pickup!",
+    channel: "SMS",
+  },
+  CANCELLED: {
+    type: "BOOKING_CANCELLED",
+    message: "Your booking has been cancelled.",
+    channel: "EMAIL",
+  },
+};
 
 export const BOOKING_STATUS_TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
   PENDING: ["CONFIRMED", "CANCELLED"],
@@ -320,22 +348,16 @@ export async function transitionBookingStatus(
     return result;
   });
 
-  // Fire-and-record notifications on the two customer-facing milestones.
+  // Fire-and-record notifications on every customer-relevant milestone.
   // sendNotification itself is a stub — see notificationService.ts for
   // where a real SMS/email provider plugs in.
-  if (nextStatus === "CONFIRMED") {
+  const notification = CUSTOMER_NOTIFICATION_BY_STATUS[nextStatus];
+  if (notification) {
     await createAndSendNotification({
       customerId: booking.customerId,
-      type: "BOOKING_CONFIRMED",
-      message: "Your booking has been confirmed. We look forward to seeing you!",
-      channel: "EMAIL",
-    });
-  } else if (nextStatus === "READY") {
-    await createAndSendNotification({
-      customerId: booking.customerId,
-      type: "JOB_READY",
-      message: "Your vehicle is ready for pickup!",
-      channel: "SMS",
+      type: notification.type,
+      message: notification.message,
+      channel: notification.channel,
     });
   }
 

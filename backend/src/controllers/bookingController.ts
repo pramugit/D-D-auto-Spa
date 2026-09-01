@@ -12,6 +12,7 @@ import {
   transitionBookingStatus,
 } from "../services/bookingService";
 import { safeCustomerSelect, safeStaffSelect } from "../utils/prismaSelects";
+import { createInvoiceForJobCard } from "../services/invoiceService";
 
 const bookingInclude = {
   vehicle: true,
@@ -102,6 +103,26 @@ export async function updateStatus(req: Request, res: Response) {
     role: req.user!.type === "staff" ? req.user!.role : undefined,
     notes: req.body.notes,
   });
+
+  // Auto-draft an invoice the moment a booking reaches QUALITY_CHECK, so
+  // staff aren't required to remember a manual "generate invoice" step —
+  // it's still just a normal invoice afterward (payable, viewable) via
+  // the existing invoice endpoints. QUALITY_CHECK is only ever entered
+  // through this endpoint (the state machine has no other path into it),
+  // so hooking it here — rather than inside transitionBookingStatus
+  // itself — avoids a circular import between bookingService and
+  // invoiceService (which already depends on bookingService for the
+  // payment-triggered auto-completion).
+  if (booking.status === "QUALITY_CHECK") {
+    const jobCard = await prisma.jobCard.findUnique({ where: { bookingId: booking.id } });
+    if (jobCard) {
+      const existingInvoice = await prisma.invoice.findUnique({ where: { jobCardId: jobCard.id } });
+      if (!existingInvoice) {
+        await createInvoiceForJobCard(jobCard.id);
+      }
+    }
+  }
+
   res.json(withOwnerRole(booking));
 }
 

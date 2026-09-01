@@ -76,7 +76,9 @@ enum PaymentStatus {
 
 enum NotificationType {
   BOOKING_CONFIRMED
+  JOB_STARTED
   JOB_READY
+  BOOKING_CANCELLED
   PAYMENT_VERIFIED
   GENERAL
 }
