@@ -64,7 +64,7 @@ export async function createPayment(req: Request, res: Response) {
   });
 
   if (payment.status === "VERIFIED") {
-    await reconcileInvoiceStatus(req.params.id);
+    await reconcileInvoiceStatus(req.params.id, req.user!.type === "staff" ? req.user!.sub : null);
   }
 
   res.status(201).json(payment);
@@ -84,7 +84,7 @@ export async function verifyPayment(req: Request, res: Response) {
   });
 
   if (status === "VERIFIED") {
-    await reconcileInvoiceStatus(payment.invoiceId);
+    await reconcileInvoiceStatus(payment.invoiceId, req.user!.sub);
   }
 
   res.json(updated);

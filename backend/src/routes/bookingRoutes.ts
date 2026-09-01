@@ -19,6 +19,7 @@ router.use(authenticate);
 router.get("/availability", validateQuery(availabilityQuerySchema), asyncHandler(controller.availability));
 router.get("/", asyncHandler(controller.list));
 router.get("/:id", asyncHandler(controller.get));
+router.get("/:id/activity-log", asyncHandler(controller.activityLog));
 
 // A customer books for themselves; staff (front desk) may book on a
 // customer's behalf by supplying customerId in the body.

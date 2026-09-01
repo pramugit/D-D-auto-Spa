@@ -45,7 +45,7 @@ async function verifiedTotal(invoiceId: string): Promise<number> {
 // 1 loyalty point per whole currency unit spent.
 const LOYALTY_POINTS_PER_CURRENCY_UNIT = 1;
 
-export async function reconcileInvoiceStatus(invoiceId: string) {
+export async function reconcileInvoiceStatus(invoiceId: string, verifiedByUserId: string | null = null) {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     include: { jobCard: { include: { booking: true } } },
@@ -70,7 +70,10 @@ export async function reconcileInvoiceStatus(invoiceId: string) {
 
     const bookingStatus = invoice.jobCard.booking.status;
     if (BOOKING_STATUS_TRANSITIONS[bookingStatus]?.includes("COMPLETED")) {
-      await transitionBookingStatus(invoice.jobCard.booking.id, "COMPLETED");
+      await transitionBookingStatus(invoice.jobCard.booking.id, "COMPLETED", {
+        userId: verifiedByUserId,
+        notes: "Auto-completed: invoice paid in full",
+      });
     }
   }
 

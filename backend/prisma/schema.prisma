@@ -102,9 +102,10 @@ model User {
   role         StaffRole @default(TECHNICIAN)
   createdAt    DateTime  @default(now())
 
-  inspectionsPerformed DamageInspection[] @relation("InspectedBy")
-  paymentsVerified     Payment[]          @relation("VerifiedBy")
+  inspectionsPerformed DamageInspection[]    @relation("InspectedBy")
+  paymentsVerified     Payment[]             @relation("VerifiedBy")
   jobCards             JobCardTechnician[]
+  bookingActivityLogs  BookingActivityLog[]
 
   @@map("users")
 }
@@ -230,12 +231,33 @@ model Booking {
 
   services BookingService[]
   jobCard  JobCard?
+  activityLogs BookingActivityLog[]
 
   @@index([customerId])
   @@index([vehicleId])
   @@index([bayId])
   @@index([scheduledAt])
   @@map("bookings")
+}
+
+// One row per status transition, written automatically as a side effect
+// of transitionBookingStatus — never manually logged by staff. Also
+// doubles as the source of truth for "when did the booking enter its
+// current status" (Phase C's SLA check reads the latest row here rather
+// than duplicating a timestamp on Booking).
+model BookingActivityLog {
+  id              String        @id @default(uuid())
+  bookingId       String
+  booking         Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  fromStatus      BookingStatus
+  toStatus        BookingStatus
+  changedByUserId String?
+  changedByUser   User?         @relation(fields: [changedByUserId], references: [id])
+  notes           String?
+  createdAt       DateTime      @default(now())
+
+  @@index([bookingId, createdAt])
+  @@map("booking_activity_logs")
 }
 
 // A booked line item is either a single Service or a ServicePackage

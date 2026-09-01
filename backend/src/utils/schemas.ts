@@ -126,6 +126,7 @@ export const availabilityQuerySchema = z.object({
 
 export const transitionBookingStatusSchema = z.object({
   status: bookingStatusEnum,
+  notes: z.string().optional(),
 });
 
 export const assignBaySchema = z.object({

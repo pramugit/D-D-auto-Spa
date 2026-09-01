@@ -1,7 +1,12 @@
 import type { Request, Response } from "express";
 import { prisma } from "../utils/prisma";
 import { AppError } from "../utils/AppError";
-import { createBooking, getAvailability, transitionBookingStatus } from "../services/bookingService";
+import {
+  createBooking,
+  getAvailability,
+  getBookingActivityLog,
+  transitionBookingStatus,
+} from "../services/bookingService";
 import { safeCustomerSelect } from "../utils/prismaSelects";
 
 const bookingInclude = {
@@ -77,8 +82,21 @@ export async function availability(req: Request, res: Response) {
 }
 
 export async function updateStatus(req: Request, res: Response) {
-  const booking = await transitionBookingStatus(req.params.id, req.body.status);
+  const booking = await transitionBookingStatus(req.params.id, req.body.status, {
+    userId: req.user!.type === "staff" ? req.user!.sub : null,
+    notes: req.body.notes,
+  });
   res.json(booking);
+}
+
+export async function activityLog(req: Request, res: Response) {
+  const booking = await prisma.booking.findUnique({ where: { id: req.params.id } });
+  if (!booking) throw new AppError(404, "Booking not found");
+  if (req.user?.type === "customer" && booking.customerId !== req.user.sub) {
+    throw new AppError(403, "Not your booking");
+  }
+  const log = await getBookingActivityLog(req.params.id);
+  res.json(log);
 }
 
 export async function assignBay(req: Request, res: Response) {

@@ -150,7 +150,19 @@ export async function getAvailability(dateStr: string, requestedDurationMinutes?
   return { date: dateStr, bayCount, slots };
 }
 
-export async function transitionBookingStatus(bookingId: string, nextStatus: BookingStatus) {
+export interface TransitionActor {
+  /** The JWT-authenticated staff user performing the transition, or null
+   *  if it was the customer themselves (e.g. a future customer-initiated
+   *  cancellation) — never a manually-typed name. */
+  userId: string | null;
+  notes?: string;
+}
+
+export async function transitionBookingStatus(
+  bookingId: string,
+  nextStatus: BookingStatus,
+  actor: TransitionActor = { userId: null }
+) {
   const booking = await prisma.booking.findUnique({ where: { id: bookingId }, include: { jobCard: true } });
   if (!booking) throw new AppError(404, "Booking not found");
 
@@ -159,8 +171,22 @@ export async function transitionBookingStatus(bookingId: string, nextStatus: Boo
     throw new AppError(400, `Cannot transition booking from ${booking.status} to ${nextStatus}`);
   }
 
+  const fromStatus = booking.status;
+
   const updated = await prisma.$transaction(async (tx) => {
     const result = await tx.booking.update({ where: { id: bookingId }, data: { status: nextStatus } });
+
+    // Automatic side effect of every transition — never a manual staff
+    // entry. This is the sole write path for BookingActivityLog.
+    await tx.bookingActivityLog.create({
+      data: {
+        bookingId,
+        fromStatus,
+        toStatus: nextStatus,
+        changedByUserId: actor.userId,
+        notes: actor.notes,
+      },
+    });
 
     if (nextStatus === "CONFIRMED") {
       await tx.jobCard.upsert({
@@ -204,4 +230,32 @@ export async function transitionBookingStatus(bookingId: string, nextStatus: Boo
   }
 
   return updated;
+}
+
+export async function getBookingActivityLog(bookingId: string) {
+  const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+  if (!booking) throw new AppError(404, "Booking not found");
+
+  return prisma.bookingActivityLog.findMany({
+    where: { bookingId },
+    orderBy: { createdAt: "asc" },
+    include: { changedByUser: { select: { id: true, name: true, role: true } } },
+  });
+}
+
+/**
+ * When the booking entered its current status — the createdAt of the most
+ * recent activity log row, or the booking's own createdAt if it's still in
+ * its initial PENDING status (no transition has happened yet). Used by
+ * Phase C's SLA check instead of a duplicated timestamp column on Booking.
+ */
+export async function getStatusEnteredAt(bookingId: string): Promise<Date> {
+  const latest = await prisma.bookingActivityLog.findFirst({
+    where: { bookingId },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  if (latest) return latest.createdAt;
+  const booking = await prisma.booking.findUnique({ where: { id: bookingId }, select: { createdAt: true } });
+  return booking?.createdAt ?? new Date();
 }
