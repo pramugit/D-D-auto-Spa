@@ -147,6 +147,7 @@ export interface BookingActivityLogEntry {
 export interface AttentionBooking {
   id: string;
   status: BookingStatus;
+  jobCardId: string | null;
   currentOwnerRole: StaffRole | null;
   currentOwnerUserId: string | null;
   statusEnteredAt: string;

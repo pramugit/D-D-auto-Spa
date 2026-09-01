@@ -417,6 +417,10 @@ export async function getStatusEnteredAt(bookingId: string): Promise<Date> {
 export interface AttentionBooking {
   id: string;
   status: BookingStatus;
+  // Null for PENDING bookings — the job card isn't created until
+  // CONFIRMED, so a PENDING booking flagged for an SLA breach has
+  // nothing to link a "view job card" action to yet.
+  jobCardId: string | null;
   currentOwnerRole: StaffRole | null;
   currentOwnerUserId: string | null;
   statusEnteredAt: Date;
@@ -442,6 +446,7 @@ export async function getBookingsNeedingAttention(): Promise<AttentionBooking[]>
     include: {
       customer: { select: { id: true, name: true } },
       vehicle: { select: { id: true, plateNumber: true, make: true, model: true } },
+      jobCard: { select: { id: true } },
     },
     orderBy: { scheduledAt: "asc" },
   });
@@ -460,6 +465,7 @@ export async function getBookingsNeedingAttention(): Promise<AttentionBooking[]>
       results.push({
         id: booking.id,
         status: booking.status,
+        jobCardId: booking.jobCard?.id ?? null,
         currentOwnerRole: getCurrentOwnerRole(booking.status),
         currentOwnerUserId: booking.currentOwnerUserId,
         statusEnteredAt,

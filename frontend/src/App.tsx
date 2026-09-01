@@ -16,6 +16,7 @@ import { InvoicesPage } from "./pages/InvoicesPage";
 import { InventoryPage } from "./pages/InventoryPage";
 import { UsersPage } from "./pages/UsersPage";
 import { ReportsPage } from "./pages/ReportsPage";
+import { OpsDashboardPage } from "./pages/OpsDashboardPage";
 import { PortalLoginPage } from "./pages/portal/PortalLoginPage";
 import { PortalBookPage } from "./pages/portal/PortalBookPage";
 import { PortalBookingsPage } from "./pages/portal/PortalBookingsPage";
@@ -80,6 +81,14 @@ function App() {
                 element={
                   <ProtectedRoute roles={["ADMIN"]}>
                     <UsersPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/ops-dashboard"
+                element={
+                  <ProtectedRoute roles={["ADMIN", "MANAGER"]}>
+                    <OpsDashboardPage />
                   </ProtectedRoute>
                 }
               />
