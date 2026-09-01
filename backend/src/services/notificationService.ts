@@ -1,5 +1,5 @@
 import { prisma } from "../utils/prisma";
-import type { Notification, NotificationChannel, NotificationType } from "@prisma/client";
+import type { BookingStatus, Notification, NotificationChannel, NotificationType } from "@prisma/client";
 
 /**
  * Stub notification dispatcher. In production, plug in a real provider
@@ -23,4 +23,58 @@ export async function createAndSendNotification(input: {
   });
   await sendNotification(notification);
   return notification;
+}
+
+const STATUS_LABELS: Partial<Record<BookingStatus, string>> = {
+  CONFIRMED: "Confirmed",
+  IN_PROGRESS: "In Progress",
+  QUALITY_CHECK: "Quality Check",
+  READY: "Ready for pickup",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+};
+
+/**
+ * WhatsApp progress update with an optional photo link, composed from a
+ * booking's customer/vehicle and its job card's most recent photo (AFTER
+ * preferred, falling back to whatever was uploaded most recently). Logs
+ * the composed message and marks the Notification record SENT, exactly
+ * like sendNotification above — a real integration (Twilio's WhatsApp
+ * API or the Meta Cloud API) plugs in here instead; this is not a live
+ * send.
+ */
+export async function sendWhatsAppProgressUpdate(
+  booking: {
+    id: string;
+    customerId: string;
+    customer: { name: string };
+    vehicle: { make: string; model: string; plateNumber: string };
+  },
+  jobCardId: string | null,
+  newStatus: BookingStatus,
+  type: NotificationType
+) {
+  let photoUrl: string | null = null;
+  if (jobCardId) {
+    const afterPhoto = await prisma.photo.findFirst({
+      where: { jobCardId, type: "AFTER" },
+      orderBy: { uploadedAt: "desc" },
+    });
+    const anyPhoto =
+      afterPhoto ?? (await prisma.photo.findFirst({ where: { jobCardId }, orderBy: { uploadedAt: "desc" } }));
+    photoUrl = anyPhoto?.url ?? null;
+  }
+
+  const statusLabel = STATUS_LABELS[newStatus] ?? newStatus;
+  let message = `Hi ${booking.customer.name}, your ${booking.vehicle.make} ${booking.vehicle.model} (${booking.vehicle.plateNumber}) is now: ${statusLabel}.`;
+  if (photoUrl) {
+    message += ` Photo: ${photoUrl}`;
+  }
+
+  return createAndSendNotification({
+    customerId: booking.customerId,
+    type,
+    message,
+    channel: "WHATSAPP",
+  });
 }

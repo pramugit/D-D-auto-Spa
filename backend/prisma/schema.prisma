@@ -78,6 +78,7 @@ enum NotificationType {
   BOOKING_CONFIRMED
   JOB_STARTED
   JOB_READY
+  JOB_COMPLETED
   BOOKING_CANCELLED
   PAYMENT_VERIFIED
   GENERAL
@@ -86,6 +87,7 @@ enum NotificationType {
 enum NotificationChannel {
   SMS
   EMAIL
+  WHATSAPP
 }
 
 enum NotificationStatus {

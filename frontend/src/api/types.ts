@@ -19,10 +19,11 @@ export type NotificationType =
   | "BOOKING_CONFIRMED"
   | "JOB_STARTED"
   | "JOB_READY"
+  | "JOB_COMPLETED"
   | "BOOKING_CANCELLED"
   | "PAYMENT_VERIFIED"
   | "GENERAL";
-export type NotificationChannel = "SMS" | "EMAIL";
+export type NotificationChannel = "SMS" | "EMAIL" | "WHATSAPP";
 export type NotificationStatus = "PENDING" | "SENT";
 
 export interface StaffUser {

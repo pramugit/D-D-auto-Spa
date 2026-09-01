@@ -1,7 +1,7 @@
 import { prisma } from "../utils/prisma";
 import { AppError } from "../utils/AppError";
 import type { BookingStatus, NotificationChannel, NotificationType, StaffRole } from "@prisma/client";
-import { createAndSendNotification } from "./notificationService";
+import { createAndSendNotification, sendWhatsAppProgressUpdate } from "./notificationService";
 import { safeCustomerSelect } from "../utils/prismaSelects";
 import { PERMISSIONS } from "../config/permissions";
 
@@ -36,6 +36,18 @@ const CUSTOMER_NOTIFICATION_BY_STATUS: Partial<
     message: "Your booking has been cancelled.",
     channel: "EMAIL",
   },
+};
+
+// WhatsApp fires on a wider set than the SMS/EMAIL map above (adds
+// COMPLETED) — same trigger point in transitionBookingStatus below,
+// just a second lookup/send alongside the existing one rather than a
+// separate hook elsewhere in the codebase.
+const WHATSAPP_NOTIFICATION_TYPE_BY_STATUS: Partial<Record<BookingStatus, NotificationType>> = {
+  CONFIRMED: "BOOKING_CONFIRMED",
+  IN_PROGRESS: "JOB_STARTED",
+  READY: "JOB_READY",
+  COMPLETED: "JOB_COMPLETED",
+  CANCELLED: "BOOKING_CANCELLED",
 };
 
 export const BOOKING_STATUS_TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
@@ -271,7 +283,14 @@ export async function transitionBookingStatus(
   nextStatus: BookingStatus,
   actor: TransitionActor = { userId: null }
 ) {
-  const booking = await prisma.booking.findUnique({ where: { id: bookingId }, include: { jobCard: true } });
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: {
+      jobCard: true,
+      customer: { select: { name: true } },
+      vehicle: { select: { make: true, model: true, plateNumber: true } },
+    },
+  });
   if (!booking) throw new AppError(404, "Booking not found");
 
   const allowed = BOOKING_STATUS_TRANSITIONS[booking.status];
@@ -360,7 +379,7 @@ export async function transitionBookingStatus(
 
   // Fire-and-record notifications on every customer-relevant milestone.
   // sendNotification itself is a stub — see notificationService.ts for
-  // where a real SMS/email provider plugs in.
+  // where a real SMS/email/WhatsApp provider plugs in.
   const notification = CUSTOMER_NOTIFICATION_BY_STATUS[nextStatus];
   if (notification) {
     await createAndSendNotification({
@@ -369,6 +388,11 @@ export async function transitionBookingStatus(
       message: notification.message,
       channel: notification.channel,
     });
+  }
+
+  const whatsappType = WHATSAPP_NOTIFICATION_TYPE_BY_STATUS[nextStatus];
+  if (whatsappType) {
+    await sendWhatsAppProgressUpdate(booking, booking.jobCard?.id ?? null, nextStatus, whatsappType);
   }
 
   return updated;
