@@ -106,6 +106,7 @@ model User {
   paymentsVerified     Payment[]             @relation("VerifiedBy")
   jobCards             JobCardTechnician[]
   bookingActivityLogs  BookingActivityLog[]
+  ownedBookings        Booking[]             @relation("BookingCurrentOwner")
 
   @@map("users")
 }
@@ -228,6 +229,12 @@ model Booking {
   bay         Bay?          @relation(fields: [bayId], references: [id])
   status      BookingStatus @default(PENDING)
   createdAt   DateTime      @default(now())
+
+  // Whoever is currently responsible for the booking's CURRENT status
+  // (e.g. the manager who claimed it for quality check). Reset to null on
+  // every status transition — ownership is per-stage, not carried over.
+  currentOwnerUserId String?
+  currentOwner       User?   @relation("BookingCurrentOwner", fields: [currentOwnerUserId], references: [id])
 
   services BookingService[]
   jobCard  JobCard?

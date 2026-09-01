@@ -1,18 +1,22 @@
 import type { Request, Response } from "express";
+import type { Booking } from "@prisma/client";
 import { prisma } from "../utils/prisma";
 import { AppError } from "../utils/AppError";
 import {
+  claimBooking,
   createBooking,
   getAvailability,
   getBookingActivityLog,
+  getCurrentOwnerRole,
   transitionBookingStatus,
 } from "../services/bookingService";
-import { safeCustomerSelect } from "../utils/prismaSelects";
+import { safeCustomerSelect, safeStaffSelect } from "../utils/prismaSelects";
 
 const bookingInclude = {
   vehicle: true,
   customer: { select: safeCustomerSelect },
   bay: true,
+  currentOwner: { select: safeStaffSelect },
   services: { include: { service: true, package: true } },
   jobCard: {
     include: {
@@ -23,6 +27,11 @@ const bookingInclude = {
     },
   },
 } as const;
+
+/** Adds the computed currentOwnerRole alongside the stored currentOwnerUserId/currentOwner. */
+function withOwnerRole<T extends { status: Booking["status"] }>(booking: T) {
+  return { ...booking, currentOwnerRole: getCurrentOwnerRole(booking.status) };
+}
 
 export async function list(req: Request, res: Response) {
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
@@ -40,7 +49,7 @@ export async function list(req: Request, res: Response) {
     include: bookingInclude,
     orderBy: { scheduledAt: "desc" },
   });
-  res.json(bookings);
+  res.json(bookings.map(withOwnerRole));
 }
 
 export async function get(req: Request, res: Response) {
@@ -52,7 +61,7 @@ export async function get(req: Request, res: Response) {
   if (req.user?.type === "customer" && booking.customerId !== req.user.sub) {
     throw new AppError(403, "Not your booking");
   }
-  res.json(booking);
+  res.json(withOwnerRole(booking));
 }
 
 export async function create(req: Request, res: Response) {
@@ -70,7 +79,7 @@ export async function create(req: Request, res: Response) {
     scheduledAt: req.body.scheduledAt,
     items: req.body.items,
   });
-  res.status(201).json(booking);
+  res.status(201).json(withOwnerRole(booking));
 }
 
 export async function availability(req: Request, res: Response) {
@@ -84,9 +93,16 @@ export async function availability(req: Request, res: Response) {
 export async function updateStatus(req: Request, res: Response) {
   const booking = await transitionBookingStatus(req.params.id, req.body.status, {
     userId: req.user!.type === "staff" ? req.user!.sub : null,
+    role: req.user!.type === "staff" ? req.user!.role : undefined,
     notes: req.body.notes,
   });
-  res.json(booking);
+  res.json(withOwnerRole(booking));
+}
+
+export async function claim(req: Request, res: Response) {
+  if (req.user!.type !== "staff") throw new AppError(403, "Staff access required");
+  const booking = await claimBooking(req.params.id, { userId: req.user!.sub, role: req.user!.role });
+  res.json(withOwnerRole(booking));
 }
 
 export async function activityLog(req: Request, res: Response) {

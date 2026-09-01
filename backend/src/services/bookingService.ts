@@ -1,6 +1,6 @@
 import { prisma } from "../utils/prisma";
 import { AppError } from "../utils/AppError";
-import type { BookingStatus } from "@prisma/client";
+import type { BookingStatus, StaffRole } from "@prisma/client";
 import { createAndSendNotification } from "./notificationService";
 import { safeCustomerSelect } from "../utils/prismaSelects";
 
@@ -17,6 +17,36 @@ export const BOOKING_STATUS_TRANSITIONS: Record<BookingStatus, BookingStatus[]> 
   READY: ["COMPLETED"],
   COMPLETED: [],
   CANCELLED: [],
+};
+
+// Who is responsible for a booking while it sits in each status. Purely a
+// display/claim concept — does not gate every transition, only the three
+// specific ones below that Phase B calls out.
+const OWNER_ROLE_BY_STATUS: Record<BookingStatus, StaffRole | null> = {
+  PENDING: "RECEPTIONIST",
+  CONFIRMED: "RECEPTIONIST",
+  IN_PROGRESS: "TECHNICIAN",
+  QUALITY_CHECK: "MANAGER",
+  READY: "RECEPTIONIST",
+  COMPLETED: null,
+  CANCELLED: null,
+};
+
+export function getCurrentOwnerRole(status: BookingStatus): StaffRole | null {
+  return OWNER_ROLE_BY_STATUS[status];
+}
+
+// The three transitions Phase B calls out as needing enforced, on-record
+// responsibility, keyed by the destination status. ADMIN can always
+// perform any transition (existing pattern throughout this codebase).
+// Not applied when actor.role is omitted — the invoice-triggered
+// auto-completion of READY->COMPLETED is a system consequence of full
+// payment, not a specific staff member acting out of turn, so it
+// intentionally bypasses this check (see transitionBookingStatus).
+const TRANSITION_REQUIRES_ROLE: Partial<Record<BookingStatus, StaffRole[]>> = {
+  CONFIRMED: ["RECEPTIONIST", "MANAGER", "ADMIN"], // PENDING -> CONFIRMED
+  READY: ["MANAGER", "ADMIN"], // QUALITY_CHECK -> READY
+  COMPLETED: ["RECEPTIONIST", "MANAGER", "ADMIN"], // READY -> COMPLETED
 };
 
 interface BookingLineItem {
@@ -155,6 +185,11 @@ export interface TransitionActor {
    *  if it was the customer themselves (e.g. a future customer-initiated
    *  cancellation) — never a manually-typed name. */
   userId: string | null;
+  /** The actor's staff role, used to enforce TRANSITION_REQUIRES_ROLE for
+   *  manual staff-driven calls. Omit for system-triggered transitions
+   *  (e.g. the payment-reconciliation auto-completion) to skip that
+   *  check — see the constant's own comment for why. */
+  role?: StaffRole;
   notes?: string;
 }
 
@@ -171,10 +206,37 @@ export async function transitionBookingStatus(
     throw new AppError(400, `Cannot transition booking from ${booking.status} to ${nextStatus}`);
   }
 
+  if (actor.role) {
+    const requiredRoles = TRANSITION_REQUIRES_ROLE[nextStatus];
+    if (requiredRoles && !requiredRoles.includes(actor.role)) {
+      throw new AppError(
+        403,
+        `Only ${requiredRoles.join("/")} can move a booking from ${booking.status} to ${nextStatus}`
+      );
+    }
+  }
+
   const fromStatus = booking.status;
 
+  // Ownership resets on every transition — a new stage starts unclaimed —
+  // except IN_PROGRESS, where it's auto-filled from the job card's
+  // assignment if exactly one technician is assigned (unambiguous). With
+  // zero or several technicians it stays null and the UI shows the full
+  // assigned list instead of a single owner.
+  let nextOwnerUserId: string | null = null;
+  if (nextStatus === "IN_PROGRESS") {
+    const technicians = await prisma.jobCardTechnician.findMany({
+      where: { jobCard: { bookingId } },
+      select: { userId: true },
+    });
+    if (technicians.length === 1) nextOwnerUserId = technicians[0].userId;
+  }
+
   const updated = await prisma.$transaction(async (tx) => {
-    const result = await tx.booking.update({ where: { id: bookingId }, data: { status: nextStatus } });
+    const result = await tx.booking.update({
+      where: { id: bookingId },
+      data: { status: nextStatus, currentOwnerUserId: nextOwnerUserId },
+    });
 
     // Automatic side effect of every transition — never a manual staff
     // entry. This is the sole write path for BookingActivityLog.
@@ -230,6 +292,28 @@ export async function transitionBookingStatus(
   }
 
   return updated;
+}
+
+/**
+ * Lets a staff member claim ownership of a booking sitting in a status
+ * that has an owner role, provided their role matches it (ADMIN can
+ * always claim). Two technicians can't both think someone else has it —
+ * claiming an already-claimed booking re-assigns it (last claim wins;
+ * there's no lock).
+ */
+export async function claimBooking(bookingId: string, actor: { userId: string; role: StaffRole }) {
+  const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+  if (!booking) throw new AppError(404, "Booking not found");
+
+  const ownerRole = getCurrentOwnerRole(booking.status);
+  if (!ownerRole) {
+    throw new AppError(400, `${booking.status} bookings don't have a claimable owner`);
+  }
+  if (actor.role !== ownerRole && actor.role !== "ADMIN") {
+    throw new AppError(403, `Only ${ownerRole} (or ADMIN) can claim a booking at ${booking.status}`);
+  }
+
+  return prisma.booking.update({ where: { id: bookingId }, data: { currentOwnerUserId: actor.userId } });
 }
 
 export async function getBookingActivityLog(bookingId: string) {

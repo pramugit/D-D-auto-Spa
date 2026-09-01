@@ -47,4 +47,6 @@ router.patch(
   asyncHandler(controller.assignBay)
 );
 
+router.patch("/:id/claim", staffOnly, asyncHandler(controller.claim));
+
 export default router;
