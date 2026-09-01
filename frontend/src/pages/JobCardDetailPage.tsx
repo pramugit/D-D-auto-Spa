@@ -4,10 +4,21 @@ import * as jobCardsApi from "../api/jobCards";
 import * as usersApi from "../api/users";
 import * as inventoryApi from "../api/inventory";
 import * as billingApi from "../api/billing";
-import type { DamageMarking, InspectionStage, InventoryItem, JobCard, PhotoType, StaffUser } from "../api/types";
+import * as bookingsApi from "../api/bookings";
+import type {
+  BookingActivityLogEntry,
+  DamageMarking,
+  InspectionStage,
+  InventoryItem,
+  JobCard,
+  PhotoType,
+  ProfitBreakdown,
+  StaffUser,
+} from "../api/types";
 import { apiErrorMessage, API_URL } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
 import { CarDiagram } from "../components/CarDiagram";
+import { ActivityTimeline } from "../components/ActivityTimeline";
 import { useAuth } from "../hooks/useAuth";
 
 export function JobCardDetailPage() {
@@ -17,8 +28,13 @@ export function JobCardDetailPage() {
   const [jobCard, setJobCard] = useState<JobCard | null>(null);
   const [technicians, setTechnicians] = useState<StaffUser[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [activityLog, setActivityLog] = useState<BookingActivityLogEntry[]>([]);
+  const [needsAttention, setNeedsAttention] = useState(false);
+  const [profit, setProfit] = useState<ProfitBreakdown | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  const canSeeProfit = user && ["ADMIN", "MANAGER"].includes(user.role);
 
   async function load() {
     if (!id) return;
@@ -32,6 +48,17 @@ export function JobCardDetailPage() {
       setJobCard(jc);
       setTechnicians(users.filter((u) => u.role === "TECHNICIAN"));
       setInventoryItems(items);
+
+      const [log, attention] = await Promise.all([
+        bookingsApi.getBookingActivityLog(jc.bookingId),
+        bookingsApi.getBookingsNeedingAttention().catch(() => []),
+      ]);
+      setActivityLog(log);
+      setNeedsAttention(attention.some((b) => b.id === jc.bookingId));
+
+      if (canSeeProfit) {
+        jobCardsApi.getJobCardProfit(id).then(setProfit).catch(() => setProfit(null));
+      }
     } catch (err) {
       setError(apiErrorMessage(err));
     }
@@ -48,6 +75,8 @@ export function JobCardDetailPage() {
   const preInspection = jobCard.damageInspections.find((d) => d.stage === "PRE_SERVICE");
   const postInspection = jobCard.damageInspections.find((d) => d.stage === "POST_SERVICE");
   const canManage = user && ["ADMIN", "MANAGER", "RECEPTIONIST"].includes(user.role);
+  const owner = jobCard.booking.currentOwner;
+  const ownerRole = jobCard.booking.currentOwnerRole;
 
   async function handleAssign(selectedIds: string[]) {
     if (!id) return;
@@ -131,12 +160,31 @@ export function JobCardDetailPage() {
             {jobCard.booking.vehicle?.plateNumber} — {jobCard.booking.vehicle?.make} {jobCard.booking.vehicle?.model}
           </h1>
           <div className="text-sm text-slate-500">{jobCard.booking.customer?.name}</div>
+          <div className="mt-1 text-xs text-slate-400">
+            {owner
+              ? `Owner: ${owner.name} (${owner.role})`
+              : ownerRole
+                ? `Unclaimed — needs ${ownerRole}`
+                : "No owner for this status"}
+          </div>
         </div>
-        <StatusBadge status={jobCard.status} />
+        <div className="flex items-center gap-2">
+          {needsAttention && (
+            <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">
+              Needs Attention
+            </span>
+          )}
+          <StatusBadge status={jobCard.status} />
+        </div>
       </div>
 
       {notice && <div className="mb-4 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">{notice}</div>}
       {error && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+
+      <div className="mb-6 rounded-lg border border-slate-200 bg-white p-5">
+        <h2 className="mb-4 text-sm font-semibold uppercase text-slate-500">Timeline</h2>
+        <ActivityTimeline entries={activityLog} />
+      </div>
 
       <div className="mb-6 grid gap-6 md:grid-cols-2">
         <div className="rounded-lg border border-slate-200 bg-white p-5">
@@ -216,23 +264,60 @@ export function JobCardDetailPage() {
         <InventoryUsageSection items={inventoryItems} onUse={handleInventoryUsage} />
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white p-5">
-        <h2 className="mb-3 text-sm font-semibold uppercase text-slate-500">Invoice</h2>
-        {jobCard.invoice ? (
-          <Link to={`/invoices/${jobCard.invoice.id}`} className="text-sm text-slate-700 hover:underline">
-            View invoice — ${jobCard.invoice.total} ({jobCard.invoice.status})
-          </Link>
-        ) : canManage ? (
-          <button
-            onClick={handleCreateInvoice}
-            className="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
-          >
-            Generate Invoice
-          </button>
-        ) : (
-          <div className="text-sm text-slate-400">No invoice yet.</div>
-        )}
+      <div className="mb-6 grid gap-6 md:grid-cols-2">
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
+          <h2 className="mb-3 text-sm font-semibold uppercase text-slate-500">Invoice</h2>
+          {jobCard.invoice ? (
+            <Link to={`/invoices/${jobCard.invoice.id}`} className="text-sm text-slate-700 hover:underline">
+              View invoice — ${jobCard.invoice.total} ({jobCard.invoice.status})
+            </Link>
+          ) : canManage ? (
+            <button
+              onClick={handleCreateInvoice}
+              className="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
+            >
+              Generate Invoice
+            </button>
+          ) : (
+            <div className="text-sm text-slate-400">No invoice yet.</div>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
+          <h2 className="mb-3 text-sm font-semibold uppercase text-slate-500">Customer Satisfaction</h2>
+          {jobCard.review ? (
+            <div>
+              <div className="mb-1 text-amber-500">{"★".repeat(jobCard.review.rating)}{"☆".repeat(5 - jobCard.review.rating)}</div>
+              {jobCard.review.comment && <div className="text-sm text-slate-600">"{jobCard.review.comment}"</div>}
+            </div>
+          ) : (
+            <div className="text-sm text-slate-400">No review yet.</div>
+          )}
+        </div>
       </div>
+
+      {canSeeProfit && profit && (
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
+          <h2 className="mb-3 text-sm font-semibold uppercase text-slate-500">Profit Breakdown</h2>
+          <div className="grid grid-cols-4 gap-3 text-sm">
+            <div>
+              <div className="text-xs uppercase text-slate-400">Revenue</div>${profit.revenue.toFixed(2)}
+            </div>
+            <div>
+              <div className="text-xs uppercase text-slate-400">Material Cost</div>-${profit.materialCost.toFixed(2)}
+            </div>
+            <div>
+              <div className="text-xs uppercase text-slate-400">Labor Cost</div>-${profit.laborCost.toFixed(2)}
+            </div>
+            <div>
+              <div className="text-xs uppercase text-slate-400">Profit</div>
+              <span className={`font-semibold ${profit.profit >= 0 ? "text-green-600" : "text-red-600"}`}>
+                ${profit.profit.toFixed(2)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

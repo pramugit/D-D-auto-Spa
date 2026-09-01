@@ -57,3 +57,41 @@ export async function getRepeatCustomerRate(): Promise<RepeatCustomerRate> {
   const { data } = await apiClient.get<RepeatCustomerRate>("/reports/repeat-customers");
   return data;
 }
+
+export interface ProfitReport {
+  overTime: { jobCardCount: number; revenue: number; materialCost: number; laborCost: number; profit: number };
+  byCategory: { EXTERIOR: number; INTERIOR: number };
+  byTechnician: { technicianId: string; name: string; profit: number }[];
+}
+
+export async function getProfitReport(from?: string, to?: string): Promise<ProfitReport> {
+  const { data } = await apiClient.get<ProfitReport>("/reports/profit", { params: { from, to } });
+  return data;
+}
+
+export interface SatisfactionReport {
+  overall: { averageRating: number | null; reviewCount: number };
+  byTechnician: { technicianId: string; name: string; averageRating: number; reviewCount: number }[];
+  byCategory: { EXTERIOR: number | null; INTERIOR: number | null };
+}
+
+export async function getSatisfactionReport(from?: string, to?: string): Promise<SatisfactionReport> {
+  const { data } = await apiClient.get<SatisfactionReport>("/reports/satisfaction", { params: { from, to } });
+  return data;
+}
+
+export interface SatisfactionAlert {
+  reviewId: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  bookingId: string;
+  jobCardId: string;
+  customer: { id: string; name: string };
+  vehicle: { plateNumber: string; make: string; model: string };
+}
+
+export async function getSatisfactionAlerts(): Promise<SatisfactionAlert[]> {
+  const { data } = await apiClient.get<SatisfactionAlert[]>("/reports/satisfaction-alerts");
+  return data;
+}

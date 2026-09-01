@@ -1,14 +1,17 @@
 import type { Request, Response } from "express";
+import type { Booking } from "@prisma/client";
 import { prisma } from "../utils/prisma";
 import { AppError } from "../utils/AppError";
-import { safeCustomerSelect } from "../utils/prismaSelects";
+import { safeCustomerSelect, safeStaffSelect } from "../utils/prismaSelects";
 import { calculateJobCardProfit } from "../services/profitService";
+import { getCurrentOwnerRole } from "../services/bookingService";
 
 const jobCardInclude = {
   booking: {
     include: {
       customer: { select: safeCustomerSelect },
       vehicle: true,
+      currentOwner: { select: safeStaffSelect },
       services: { include: { service: true, package: true } },
     },
   },
@@ -16,7 +19,13 @@ const jobCardInclude = {
   damageInspections: true,
   photos: true,
   invoice: true,
+  review: true,
 } as const;
+
+/** Adds the computed currentOwnerRole onto the nested booking, same as bookingController does. */
+function withOwnerRole<T extends { booking: { status: Booking["status"] } }>(jobCard: T) {
+  return { ...jobCard, booking: { ...jobCard.booking, currentOwnerRole: getCurrentOwnerRole(jobCard.booking.status) } };
+}
 
 export async function list(req: Request, res: Response) {
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
@@ -24,13 +33,13 @@ export async function list(req: Request, res: Response) {
     where: status ? { status: status as never } : undefined,
     include: jobCardInclude,
   });
-  res.json(jobCards);
+  res.json(jobCards.map(withOwnerRole));
 }
 
 export async function get(req: Request, res: Response) {
   const jobCard = await prisma.jobCard.findUnique({ where: { id: req.params.id }, include: jobCardInclude });
   if (!jobCard) throw new AppError(404, "Job card not found");
-  res.json(jobCard);
+  res.json(withOwnerRole(jobCard));
 }
 
 export async function assignTechnicians(req: Request, res: Response) {
@@ -51,7 +60,7 @@ export async function assignTechnicians(req: Request, res: Response) {
   ]);
 
   const jobCard = await prisma.jobCard.findUnique({ where: { id: req.params.id }, include: jobCardInclude });
-  res.json(jobCard);
+  res.json(jobCard ? withOwnerRole(jobCard) : jobCard);
 }
 
 export async function updateNotes(req: Request, res: Response) {

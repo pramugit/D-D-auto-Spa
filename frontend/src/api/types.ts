@@ -15,7 +15,13 @@ export type PhotoType = "BEFORE" | "AFTER";
 export type InvoiceStatus = "UNPAID" | "PAID" | "PARTIALLY_PAID";
 export type PaymentMethod = "CASH" | "CARD" | "BANK_TRANSFER";
 export type PaymentStatus = "PENDING_VERIFICATION" | "VERIFIED" | "REJECTED";
-export type NotificationType = "BOOKING_CONFIRMED" | "JOB_READY" | "PAYMENT_VERIFIED" | "GENERAL";
+export type NotificationType =
+  | "BOOKING_CONFIRMED"
+  | "JOB_STARTED"
+  | "JOB_READY"
+  | "BOOKING_CANCELLED"
+  | "PAYMENT_VERIFIED"
+  | "GENERAL";
 export type NotificationChannel = "SMS" | "EMAIL";
 export type NotificationStatus = "PENDING" | "SENT";
 
@@ -25,6 +31,7 @@ export interface StaffUser {
   email: string;
   phone?: string | null;
   role: StaffRole;
+  hourlyRate?: string | null;
   createdAt: string;
 }
 
@@ -114,6 +121,9 @@ export interface Booking {
   bay?: Bay | null;
   status: BookingStatus;
   createdAt: string;
+  currentOwnerUserId?: string | null;
+  currentOwnerRole?: StaffRole | null;
+  currentOwner?: { id: string; name: string; email: string; role: StaffRole } | null;
   customer?: Customer;
   vehicle?: Vehicle;
   services?: BookingServiceItem[];
@@ -121,6 +131,39 @@ export interface Booking {
   // or `technicians`, to avoid re-embedding); the full JobCard type below
   // is what /job-cards (staff) returns.
   jobCard?: BookingJobCardSummary | null;
+}
+
+export interface BookingActivityLogEntry {
+  id: string;
+  bookingId: string;
+  fromStatus: BookingStatus;
+  toStatus: BookingStatus;
+  changedByUserId?: string | null;
+  changedByUser?: { id: string; name: string; role: StaffRole } | null;
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface AttentionBooking {
+  id: string;
+  status: BookingStatus;
+  currentOwnerRole: StaffRole | null;
+  currentOwnerUserId: string | null;
+  statusEnteredAt: string;
+  minutesInStatus: number;
+  slaMinutes: number | null;
+  slaBreached: boolean;
+  unassigned: boolean;
+  customer: { id: string; name: string };
+  vehicle: { id: string; plateNumber: string; make: string; model: string };
+}
+
+export interface ProfitBreakdown {
+  jobCardId: string;
+  revenue: number;
+  materialCost: number;
+  laborCost: number;
+  profit: number;
 }
 
 export interface BookingJobCardSummary {
@@ -212,6 +255,7 @@ export interface InventoryItem {
   unit: string;
   quantityInStock: string;
   reorderLevel: string;
+  costPerUnit: string;
 }
 
 export interface Review {

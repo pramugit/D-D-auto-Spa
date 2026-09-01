@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import type { AvailabilityResponse, Booking, BookingStatus } from "./types";
+import type { AttentionBooking, AvailabilityResponse, Booking, BookingActivityLogEntry, BookingStatus } from "./types";
 
 export interface BookingLineItemInput {
   serviceId?: string;
@@ -33,12 +33,27 @@ export async function getAvailability(date: string, durationMinutes?: number): P
   return data;
 }
 
-export async function updateBookingStatus(id: string, status: BookingStatus): Promise<Booking> {
-  const { data } = await apiClient.patch<Booking>(`/bookings/${id}/status`, { status });
+export async function updateBookingStatus(id: string, status: BookingStatus, notes?: string): Promise<Booking> {
+  const { data } = await apiClient.patch<Booking>(`/bookings/${id}/status`, { status, notes });
   return data;
 }
 
 export async function assignBay(id: string, bayId: string | null): Promise<Booking> {
   const { data } = await apiClient.patch<Booking>(`/bookings/${id}/assign-bay`, { bayId });
+  return data;
+}
+
+export async function claimBooking(id: string): Promise<Booking> {
+  const { data } = await apiClient.patch<Booking>(`/bookings/${id}/claim`);
+  return data;
+}
+
+export async function getBookingActivityLog(id: string): Promise<BookingActivityLogEntry[]> {
+  const { data } = await apiClient.get<BookingActivityLogEntry[]>(`/bookings/${id}/activity-log`);
+  return data;
+}
+
+export async function getBookingsNeedingAttention(): Promise<AttentionBooking[]> {
+  const { data } = await apiClient.get<AttentionBooking[]>("/bookings/attention");
   return data;
 }

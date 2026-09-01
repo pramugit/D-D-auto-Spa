@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import type { DamageInspection, DamageMarking, InspectionStage, JobCard, PhotoType } from "./types";
+import type { DamageInspection, DamageMarking, InspectionStage, JobCard, PhotoType, ProfitBreakdown } from "./types";
 
 export async function listJobCards(status?: string): Promise<JobCard[]> {
   const { data } = await apiClient.get<JobCard[]>("/job-cards", { params: status ? { status } : undefined });
@@ -50,5 +50,10 @@ export async function uploadPhoto(jobCardId: string, file: File, type: PhotoType
 
 export async function recordInventoryUsage(jobCardId: string, itemId: string, quantityUsed: number) {
   const { data } = await apiClient.post(`/job-cards/${jobCardId}/inventory-usage`, { itemId, quantityUsed });
+  return data;
+}
+
+export async function getJobCardProfit(jobCardId: string): Promise<ProfitBreakdown> {
+  const { data } = await apiClient.get<ProfitBreakdown>(`/job-cards/${jobCardId}/profit`);
   return data;
 }
