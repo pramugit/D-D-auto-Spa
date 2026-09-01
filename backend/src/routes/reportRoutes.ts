@@ -18,5 +18,7 @@ router.get("/repeat-customers", adminOnly, asyncHandler(controller.repeatCustome
 // Financially sensitive but needed by the Phase H manager dashboard, so
 // MANAGER can see it too (unlike the admin-only set above).
 router.get("/profit", managerAndAbove, asyncHandler(controller.profit));
+router.get("/satisfaction", managerAndAbove, asyncHandler(controller.satisfaction));
+router.get("/satisfaction-alerts", managerAndAbove, asyncHandler(controller.satisfactionAlerts));
 
 export default router;

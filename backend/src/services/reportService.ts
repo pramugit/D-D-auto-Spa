@@ -272,3 +272,133 @@ export async function getRepeatCustomerRate() {
     repeatRate: totalCustomers > 0 ? Math.round((repeatCustomers / totalCustomers) * 1000) / 10 : 0,
   };
 }
+
+/** Overall average review rating over a date range. */
+export async function getAverageRating(from?: Date, to?: Date) {
+  const reviews = await prisma.review.findMany({
+    where: { createdAt: { gte: from, lte: to } },
+    select: { rating: true },
+  });
+  if (reviews.length === 0) return { averageRating: null, reviewCount: 0 };
+  const sum = reviews.reduce((s, r) => s + r.rating, 0);
+  return { averageRating: round2(sum / reviews.length), reviewCount: reviews.length };
+}
+
+/** Average rating per technician, counting a review toward every technician assigned to its job card. */
+export async function getAverageRatingByTechnician(from?: Date, to?: Date) {
+  const reviews = await prisma.review.findMany({
+    where: { createdAt: { gte: from, lte: to } },
+    select: {
+      rating: true,
+      jobCard: { select: { technicians: { select: { userId: true, user: { select: { name: true } } } } } },
+    },
+  });
+
+  const byTechnician = new Map<string, { name: string; sum: number; count: number }>();
+  for (const review of reviews) {
+    for (const t of review.jobCard.technicians) {
+      const existing = byTechnician.get(t.userId) ?? { name: t.user.name, sum: 0, count: 0 };
+      existing.sum += review.rating;
+      existing.count += 1;
+      byTechnician.set(t.userId, existing);
+    }
+  }
+
+  return Array.from(byTechnician.entries())
+    .map(([technicianId, v]) => ({
+      technicianId,
+      name: v.name,
+      averageRating: round2(v.sum / v.count),
+      reviewCount: v.count,
+    }))
+    .sort((a, b) => b.averageRating - a.averageRating);
+}
+
+/**
+ * Average rating per service category. A review counts toward every
+ * category present among its booking's line items (a booking spanning
+ * both EXTERIOR and INTERIOR services contributes to both averages) --
+ * a rating can't be proportionally split the way money can, so this
+ * "touched" attribution is the simplest defensible rule.
+ */
+export async function getAverageRatingByCategory(from?: Date, to?: Date) {
+  const reviews = await prisma.review.findMany({
+    where: { createdAt: { gte: from, lte: to } },
+    select: {
+      rating: true,
+      jobCard: {
+        select: {
+          booking: {
+            select: {
+              services: {
+                select: {
+                  service: { select: { category: { select: { name: true } } } },
+                  package: {
+                    select: { services: { select: { service: { select: { category: { select: { name: true } } } } } } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const totals: Record<ServiceCategoryName, { sum: number; count: number }> = {
+    EXTERIOR: { sum: 0, count: 0 },
+    INTERIOR: { sum: 0, count: 0 },
+  };
+
+  for (const review of reviews) {
+    const categoriesTouched = new Set<ServiceCategoryName>();
+    for (const item of review.jobCard.booking.services) {
+      if (item.service) categoriesTouched.add(item.service.category.name);
+      if (item.package) {
+        for (const link of item.package.services) categoriesTouched.add(link.service.category.name);
+      }
+    }
+    for (const category of categoriesTouched) {
+      totals[category].sum += review.rating;
+      totals[category].count += 1;
+    }
+  }
+
+  return {
+    EXTERIOR: totals.EXTERIOR.count > 0 ? round2(totals.EXTERIOR.sum / totals.EXTERIOR.count) : null,
+    INTERIOR: totals.INTERIOR.count > 0 ? round2(totals.INTERIOR.sum / totals.INTERIOR.count) : null,
+  };
+}
+
+/** Bookings whose review rated 3 or below, most recent first, for a manager to follow up on. */
+export async function getSatisfactionAlerts() {
+  const reviews = await prisma.review.findMany({
+    where: { rating: { lte: 3 } },
+    orderBy: { createdAt: "desc" },
+    include: {
+      jobCard: {
+        select: {
+          id: true,
+          booking: {
+            select: {
+              id: true,
+              customer: { select: { id: true, name: true } },
+              vehicle: { select: { plateNumber: true, make: true, model: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  return reviews.map((review) => ({
+    reviewId: review.id,
+    rating: review.rating,
+    comment: review.comment,
+    createdAt: review.createdAt,
+    bookingId: review.jobCard.booking.id,
+    jobCardId: review.jobCard.id,
+    customer: review.jobCard.booking.customer,
+    vehicle: review.jobCard.booking.vehicle,
+  }));
+}

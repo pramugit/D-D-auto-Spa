@@ -47,3 +47,18 @@ export async function profit(req: Request, res: Response) {
   ]);
   res.json({ overTime, byCategory, byTechnician });
 }
+
+export async function satisfaction(req: Request, res: Response) {
+  const { from, to } = parseDateRange(req);
+  const [overall, byTechnician, byCategory] = await Promise.all([
+    reportService.getAverageRating(from, to),
+    reportService.getAverageRatingByTechnician(from, to),
+    reportService.getAverageRatingByCategory(from, to),
+  ]);
+  res.json({ overall, byTechnician, byCategory });
+}
+
+export async function satisfactionAlerts(_req: Request, res: Response) {
+  const data = await reportService.getSatisfactionAlerts();
+  res.json(data);
+}
