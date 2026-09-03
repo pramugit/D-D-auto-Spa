@@ -4,6 +4,10 @@ dist/
 .env.local
 uploads/photos/*
 uploads/slips/*
+uploads/gallery/*
+uploads/content/*
 !uploads/photos/.gitkeep
 !uploads/slips/.gitkeep
+!uploads/gallery/.gitkeep
+!uploads/content/.gitkeep
 *.log

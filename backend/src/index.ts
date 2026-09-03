@@ -22,6 +22,8 @@ import inventoryRoutes from "./routes/inventoryRoutes";
 import reviewRoutes from "./routes/reviewRoutes";
 import notificationRoutes from "./routes/notificationRoutes";
 import reportRoutes from "./routes/reportRoutes";
+import siteImageRoutes from "./routes/siteImageRoutes";
+import siteContentRoutes from "./routes/siteContentRoutes";
 
 const app = express();
 
@@ -62,6 +64,8 @@ app.use("/payments", paymentRoutes);
 app.use("/inventory-items", inventoryRoutes);
 app.use("/notifications", notificationRoutes);
 app.use("/reports", reportRoutes);
+app.use("/site-images", siteImageRoutes);
+app.use("/site-content", siteContentRoutes);
 
 app.use(errorHandler);
 

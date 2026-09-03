@@ -418,6 +418,26 @@ model Review {
   @@map("reviews")
 }
 
+model SiteImage {
+  id        String   @id @default(uuid())
+  slot      Int      @unique
+  url       String
+  updatedAt DateTime @updatedAt
+
+  @@map("site_images")
+}
+
+// Editable text/image content for the public landing page, keyed so more
+// pages could reuse this table later (only "landing" exists for now).
+model SiteContent {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  data      Json
+  updatedAt DateTime @updatedAt
+
+  @@map("site_content")
+}
+
 model Notification {
   id         String              @id @default(uuid())
   customerId String

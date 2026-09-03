@@ -9,12 +9,13 @@ import { asyncHandler } from "../middleware/errorHandler";
 const router = Router();
 const manage = requireSection("serviceCatalog", "edit");
 
-router.use(authenticate);
-// GET is a shared read utility, same reasoning as serviceRoutes.ts.
+// GET is public (the public landing page's price list), same reasoning as
+// serviceRoutes.ts — only the create/update/delete management actions below
+// require auth.
 router.get("/", asyncHandler(controller.list));
 router.get("/:id", asyncHandler(controller.get));
-router.post("/", manage, validateBody(createServicePackageSchema), asyncHandler(controller.create));
-router.patch("/:id", manage, validateBody(updateServicePackageSchema), asyncHandler(controller.update));
-router.delete("/:id", manage, asyncHandler(controller.remove));
+router.post("/", authenticate, manage, validateBody(createServicePackageSchema), asyncHandler(controller.create));
+router.patch("/:id", authenticate, manage, validateBody(updateServicePackageSchema), asyncHandler(controller.update));
+router.delete("/:id", authenticate, manage, asyncHandler(controller.remove));
 
 export default router;

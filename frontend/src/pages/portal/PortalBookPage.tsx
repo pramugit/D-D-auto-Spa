@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import * as portalApi from "../../api/portal";
-import type { Service, Vehicle, VehicleType } from "../../api/types";
+import type { Service, ServicePackage, Vehicle, VehicleType } from "../../api/types";
 import { apiErrorMessage } from "../../api/client";
 import { useCustomerAuth } from "../../hooks/useCustomerAuth";
 import { NameField, PlateNumberField } from "../../components/FormFields";
@@ -14,10 +14,12 @@ export function PortalBookPage() {
 
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [packages, setPackages] = useState<ServicePackage[]>([]);
   const [vehicleId, setVehicleId] = useState("");
   const [showAddVehicle, setShowAddVehicle] = useState(false);
 
   const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set());
+  const [selectedPackages, setSelectedPackages] = useState<Set<string>>(new Set());
   const [date, setDate] = useState("");
   const [slots, setSlots] = useState<{ time: string; available: boolean }[]>([]);
   const [time, setTime] = useState("");
@@ -35,30 +37,66 @@ export function PortalBookPage() {
   useEffect(() => {
     loadVehicles().catch((err) => setError(apiErrorMessage(err)));
     portalApi.listActiveServices().then(setServices).catch((err) => setError(apiErrorMessage(err)));
+    portalApi.listActivePackages().then(setPackages).catch((err) => setError(apiErrorMessage(err)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer?.id]);
+
+  // Services already covered by a selected package aren't offered as a
+  // separate line item too — that would double-book and double-charge them.
+  const packageServiceIds = new Set(
+    Array.from(selectedPackages).flatMap((id) => {
+      const pkg = packages.find((p) => p.id === id);
+      return pkg ? pkg.services.map((link) => link.serviceId) : [];
+    }),
+  );
 
   useEffect(() => {
     if (!date) {
       setSlots([]);
       return;
     }
-    const durationMinutes = Array.from(selectedServices).reduce((sum, id) => {
+    const serviceMinutes = Array.from(selectedServices).reduce((sum, id) => {
       const svc = services.find((s) => s.id === id);
       return sum + (svc?.durationMinutes ?? 0);
     }, 0);
+    const packageMinutes = Array.from(selectedPackages).reduce((sum, id) => {
+      const pkg = packages.find((p) => p.id === id);
+      return sum + (pkg ? pkg.services.reduce((s, link) => s + link.service.durationMinutes, 0) : 0);
+    }, 0);
+    const durationMinutes = serviceMinutes + packageMinutes;
     portalApi
       .getAvailability(date, durationMinutes || undefined)
       .then((res) => setSlots(res.slots))
       .catch(() => setSlots([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, selectedServices, services]);
+  }, [date, selectedServices, selectedPackages, services, packages]);
 
   function toggleService(id: string) {
+    if (packageServiceIds.has(id)) return;
     setSelectedServices((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+  }
+
+  function togglePackage(id: string) {
+    setSelectedPackages((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+        const pkg = packages.find((p) => p.id === id);
+        if (pkg) {
+          setSelectedServices((svcPrev) => {
+            const svcNext = new Set(svcPrev);
+            pkg.services.forEach((link) => svcNext.delete(link.serviceId));
+            return svcNext;
+          });
+        }
+      }
       return next;
     });
   }
@@ -73,11 +111,16 @@ export function PortalBookPage() {
     return p ? p.price : null;
   }
 
-  const total = Array.from(selectedServices).reduce((sum, id) => {
+  const serviceTotal = Array.from(selectedServices).reduce((sum, id) => {
     const svc = services.find((s) => s.id === id);
     const price = svc ? priceFor(svc) : null;
     return sum + (price ? Number(price) : 0);
   }, 0);
+  const packageTotal = Array.from(selectedPackages).reduce((sum, id) => {
+    const pkg = packages.find((p) => p.id === id);
+    return sum + (pkg ? Number(pkg.discountedPrice) : 0);
+  }, 0);
+  const total = serviceTotal + packageTotal;
 
   async function handleConfirm() {
     setError(null);
@@ -85,8 +128,8 @@ export function PortalBookPage() {
       setError("Select or add a vehicle");
       return;
     }
-    if (selectedServices.size === 0) {
-      setError("Select at least one service");
+    if (selectedServices.size === 0 && selectedPackages.size === 0) {
+      setError("Select at least one service or package");
       return;
     }
     if (!time) {
@@ -98,7 +141,10 @@ export function PortalBookPage() {
       const booking = await portalApi.createMyBooking({
         vehicleId,
         scheduledAt: time,
-        items: Array.from(selectedServices).map((id) => ({ serviceId: id })),
+        items: [
+          ...Array.from(selectedServices).map((id) => ({ serviceId: id })),
+          ...Array.from(selectedPackages).map((id) => ({ packageId: id })),
+        ],
       });
       navigate(`/portal/bookings/${booking.id}`);
     } catch (err) {
@@ -159,6 +205,40 @@ export function PortalBookPage() {
         {!selectedVehicle && (
           <div className="mb-3 text-sm text-slate-400">Select a vehicle above to see pricing for your vehicle.</div>
         )}
+
+        {packages.length > 0 && (
+          <div className="mb-4">
+            <div className="mb-2 text-xs font-semibold uppercase text-slate-400">Bundled packages</div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {packages.map((p) => (
+                <label
+                  key={p.id}
+                  className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${
+                    selectedPackages.has(p.id) ? "border-sky-400 bg-sky-50" : "border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedPackages.has(p.id)}
+                    onChange={() => togglePackage(p.id)}
+                    className="mt-0.5"
+                  />
+                  <span className="flex-1">
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-slate-800">{p.name}</span>
+                      <span className="shrink-0 text-xs font-semibold text-sky-600">${p.discountedPrice}</span>
+                    </span>
+                    {p.description && <span className="mt-0.5 block text-xs text-slate-500">{p.description}</span>}
+                    <span className="mt-0.5 block text-xs text-slate-400">
+                      Includes: {p.services.map((link) => link.service.name).join(", ")}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
         {services.length === 0 ? (
           <div className="text-sm text-slate-400">No services are available to book right now.</div>
         ) : (
@@ -170,6 +250,7 @@ export function PortalBookPage() {
               onToggle={toggleService}
               priceFor={priceFor}
               vehicleSelected={!!selectedVehicle}
+              packageServiceIds={packageServiceIds}
             />
             <ServiceGroup
               title="Interior"
@@ -178,10 +259,11 @@ export function PortalBookPage() {
               onToggle={toggleService}
               priceFor={priceFor}
               vehicleSelected={!!selectedVehicle}
+              packageServiceIds={packageServiceIds}
             />
           </div>
         )}
-        {selectedServices.size > 0 && (
+        {(selectedServices.size > 0 || selectedPackages.size > 0) && (
           <div className="mt-4 text-right text-sm font-semibold text-slate-800">Estimated total: ${total.toFixed(2)}</div>
         )}
       </div>
@@ -243,6 +325,7 @@ function ServiceGroup({
   onToggle,
   priceFor,
   vehicleSelected,
+  packageServiceIds,
 }: {
   title: string;
   services: Service[];
@@ -250,14 +333,16 @@ function ServiceGroup({
   onToggle: (id: string) => void;
   priceFor: (s: Service) => string | null;
   vehicleSelected: boolean;
+  packageServiceIds: Set<string>;
 }) {
   return (
     <div className="rounded-md border border-slate-200 p-3">
       <div className="mb-2 text-xs font-semibold uppercase text-slate-400">{title}</div>
       {services.length === 0 && <div className="text-xs text-slate-400">No {title.toLowerCase()} services available.</div>}
       {services.map((s) => {
+        const includedInPackage = packageServiceIds.has(s.id);
         const price = priceFor(s);
-        const disabled = !price;
+        const disabled = !price || includedInPackage;
         return (
           <label
             key={s.id}
@@ -269,13 +354,19 @@ function ServiceGroup({
               <input
                 type="checkbox"
                 disabled={disabled}
-                checked={selected.has(s.id)}
+                checked={includedInPackage || selected.has(s.id)}
                 onChange={() => onToggle(s.id)}
               />
               {s.name}
             </span>
             <span className="text-xs">
-              {price ? `$${price}` : vehicleSelected ? "Not offered for this vehicle" : "Select vehicle"}
+              {includedInPackage
+                ? "Included in package"
+                : price
+                  ? `$${price}`
+                  : vehicleSelected
+                    ? "Not offered for this vehicle"
+                    : "Select vehicle"}
             </span>
           </label>
         );

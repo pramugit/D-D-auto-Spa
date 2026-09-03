@@ -5,6 +5,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PortalProtectedRoute } from "./components/PortalProtectedRoute";
 import { AppLayout } from "./components/AppLayout";
 import { PortalLayout } from "./components/PortalLayout";
+import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { CustomersPage } from "./pages/CustomersPage";
 import { CustomerDetailPage } from "./pages/CustomerDetailPage";
@@ -17,16 +18,12 @@ import { InventoryPage } from "./pages/InventoryPage";
 import { UsersPage } from "./pages/UsersPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { OpsDashboardPage } from "./pages/OpsDashboardPage";
+import { SiteGalleryPage } from "./pages/SiteGalleryPage";
 import { PortalLoginPage } from "./pages/portal/PortalLoginPage";
 import { PortalBookPage } from "./pages/portal/PortalBookPage";
 import { PortalBookingsPage } from "./pages/portal/PortalBookingsPage";
 import { PortalBookingDetailPage } from "./pages/portal/PortalBookingDetailPage";
 import { PERMISSIONS } from "./config/permissions";
-
-// Job Board is the one section every staff role can view, so it's the
-// universal landing page/fallback (Bookings isn't — TECHNICIAN can't
-// see it).
-const DEFAULT_ROUTE = "/job-board";
 
 function App() {
   return (
@@ -34,8 +31,11 @@ function App() {
       <AuthProvider>
         <CustomerAuthProvider>
           <Routes>
+            {/* ---- Public marketing landing ---- */}
+            <Route path="/" element={<LandingPage />} />
+
             {/* ---- Staff / admin dashboard ---- */}
-            <Route path="/login" element={<LoginPage />} />
+            <Route path="/staff-portal/login" element={<LoginPage />} />
             <Route
               element={
                 <ProtectedRoute>
@@ -43,7 +43,6 @@ function App() {
                 </ProtectedRoute>
               }
             >
-              <Route path="/" element={<Navigate to={DEFAULT_ROUTE} replace />} />
               <Route
                 path="/bookings"
                 element={
@@ -128,6 +127,14 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/site-gallery"
+                element={
+                  <ProtectedRoute roles={PERMISSIONS.siteGallery.view}>
+                    <SiteGalleryPage />
+                  </ProtectedRoute>
+                }
+              />
             </Route>
 
             {/* ---- Customer portal ---- */}
@@ -145,7 +152,7 @@ function App() {
               <Route path="/portal/bookings/:id" element={<PortalBookingDetailPage />} />
             </Route>
 
-            <Route path="*" element={<Navigate to={DEFAULT_ROUTE} replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </CustomerAuthProvider>
       </AuthProvider>

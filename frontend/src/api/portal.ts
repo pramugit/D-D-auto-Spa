@@ -7,6 +7,7 @@ import type {
   PaymentMethod,
   Review,
   Service,
+  ServicePackage,
   Vehicle,
   VehicleType,
 } from "./types";
@@ -16,6 +17,11 @@ import type {
 export async function listActiveServices(): Promise<Service[]> {
   const { data } = await customerApiClient.get<Service[]>("/services", { params: { active: true } });
   return data;
+}
+
+export async function listActivePackages(): Promise<ServicePackage[]> {
+  const { data } = await customerApiClient.get<ServicePackage[]>("/service-packages");
+  return data.filter((p) => p.active);
 }
 
 export interface CustomerSummary {

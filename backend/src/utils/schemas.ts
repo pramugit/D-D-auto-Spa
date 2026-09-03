@@ -234,3 +234,45 @@ export const updateUserSchema = z.object({
   password: z.string().min(8).optional(),
   hourlyRate: priceField().nullable().optional(),
 });
+
+const heroSlideSchema = z.object({
+  eyebrow: z.string().min(1),
+  headlineA: z.string().min(1),
+  headlineB: z.string().min(1),
+  headlineC: z.string().min(1),
+  body: z.string().min(1),
+});
+
+const featureCardSchema = z.object({
+  title: z.string().min(1),
+  body: z.string().min(1),
+  dark: z.boolean(),
+});
+
+const serviceCardSchema = z.object({
+  title: z.string().min(1),
+  body: z.string().min(1),
+  image: z.string().min(1),
+});
+
+export const siteContentDataSchema = z.object({
+  contact: z.object({
+    location: z.string().min(1),
+    email: emailField(),
+    hours: z.string().min(1),
+  }),
+  hero: z.object({
+    slides: z.array(heroSlideSchema).length(2),
+  }),
+  features: z.array(featureCardSchema).length(4),
+  about: z.object({
+    image: z.string().min(1),
+    paragraph: z.string().min(1),
+    bullets: z.array(z.string().min(1)).length(3),
+  }),
+  services: z.array(serviceCardSchema).length(4),
+});
+
+export const updateSiteContentSchema = z.object({
+  data: siteContentDataSchema,
+});

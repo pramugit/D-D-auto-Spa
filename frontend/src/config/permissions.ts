@@ -30,7 +30,8 @@ export type PermissionSection =
   | "invoicesPayments"
   | "inventory"
   | "opsDashboard"
-  | "staff";
+  | "staff"
+  | "siteGallery";
 
 export interface SectionPermission {
   label: string;
@@ -77,6 +78,11 @@ export const PERMISSIONS: Record<PermissionSection, SectionPermission> = {
   staff: {
     label: "Staff",
     view: ["ADMIN", "MANAGER"], // manager: read-only
+    edit: ["ADMIN"],
+  },
+  siteGallery: {
+    label: "Website Gallery",
+    view: ["ADMIN"],
     edit: ["ADMIN"],
   },
 };

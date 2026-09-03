@@ -5,13 +5,16 @@ export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4001";
 const TOKEN_KEY = "autobody_token";
 const CUSTOMER_TOKEN_KEY = "autobody_customer_token";
 
+// Staff token lives in sessionStorage (per-tab) rather than localStorage
+// (shared across all tabs of the origin) so admin/technician/manager can
+// each be logged in at the same time, one per browser tab.
 export function getStoredToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  return sessionStorage.getItem(TOKEN_KEY);
 }
 
 export function setStoredToken(token: string | null) {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
+  if (token) sessionStorage.setItem(TOKEN_KEY, token);
+  else sessionStorage.removeItem(TOKEN_KEY);
 }
 
 export function getStoredCustomerToken(): string | null {
@@ -39,6 +42,13 @@ customerApiClient.interceptors.request.use((config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
+
+// Backend-relative URLs (e.g. "/uploads/gallery/x.jpg") need the API origin
+// prefixed; URLs already pointing elsewhere (frontend-static or external)
+// don't.
+export function resolveMediaUrl(url: string): string {
+  return url.startsWith("/uploads/") ? `${API_URL}${url}` : url;
+}
 
 export function apiErrorMessage(err: unknown): string {
   if (axios.isAxiosError(err)) {

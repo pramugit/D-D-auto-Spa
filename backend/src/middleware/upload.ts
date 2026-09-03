@@ -26,3 +26,13 @@ export const uploadSlip = multer({
   storage: diskStorageFor("slips"),
   limits: { fileSize: 10 * 1024 * 1024 },
 });
+
+export const uploadGallery = multer({
+  storage: diskStorageFor("gallery"),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+export const uploadContentImage = multer({
+  storage: diskStorageFor("content"),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});

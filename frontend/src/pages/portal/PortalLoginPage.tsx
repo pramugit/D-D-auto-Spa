@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useCustomerAuth } from "../../hooks/useCustomerAuth";
 import { apiErrorMessage } from "../../api/client";
 import { EmailField, NameField, PhoneField } from "../../components/FormFields";
@@ -36,9 +36,17 @@ export function PortalLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="mb-1 text-xl font-semibold text-slate-800">Autobody Service Station</h1>
+    <div className="font-display flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <div className="animate-fade-in-up w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <Link
+          to="/"
+          className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-blue-950 transition hover:text-sky-500"
+        >
+          &larr; Back
+        </Link>
+        <h1 className="mb-1 text-xl font-bold text-blue-950">
+          Auto<span className="text-sky-500">Body</span> Service Station
+        </h1>
         <p className="mb-6 text-sm text-slate-500">
           {mode === "login" ? "Sign in to your account" : "Create your account"}
         </p>
@@ -65,7 +73,7 @@ export function PortalLoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+            className="w-full rounded-full bg-sky-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-600 disabled:opacity-50"
           >
             {loading ? "Please wait..." : mode === "login" ? "Sign in" : "Create account"}
           </button>
@@ -79,9 +87,6 @@ export function PortalLoginPage() {
         >
           {mode === "login" ? "New here? Create an account" : "Already have an account? Sign in"}
         </button>
-        <a href="/login" className="mt-2 block text-center text-sm text-slate-400 hover:underline">
-          Staff member? Go to staff login
-        </a>
       </div>
     </div>
   );

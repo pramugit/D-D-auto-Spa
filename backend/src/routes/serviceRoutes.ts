@@ -9,15 +9,13 @@ import { asyncHandler } from "../middleware/errorHandler";
 const router = Router();
 const manage = requireSection("serviceCatalog", "edit");
 
-router.use(authenticate);
-// GET is a shared read utility (booking creation, the customer portal's
-// service picker) used well beyond the Service Catalog management page,
-// so it's intentionally NOT gated by serviceCatalog.view — only the
-// create/update/delete management actions below are.
+// GET is public (the public landing page's price list, plus a shared read
+// utility for booking creation and the customer portal's service picker)
+// — only the create/update/delete management actions below require auth.
 router.get("/", asyncHandler(controller.list));
 router.get("/:id", asyncHandler(controller.get));
-router.post("/", manage, validateBody(createServiceSchema), asyncHandler(controller.create));
-router.patch("/:id", manage, validateBody(updateServiceSchema), asyncHandler(controller.update));
-router.delete("/:id", manage, asyncHandler(controller.remove));
+router.post("/", authenticate, manage, validateBody(createServiceSchema), asyncHandler(controller.create));
+router.patch("/:id", authenticate, manage, validateBody(updateServiceSchema), asyncHandler(controller.update));
+router.delete("/:id", authenticate, manage, asyncHandler(controller.remove));
 
 export default router;

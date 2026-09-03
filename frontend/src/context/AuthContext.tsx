@@ -17,7 +17,7 @@ interface AuthContextValue {
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function loadStoredUser(): StaffUser | null {
-  const raw = localStorage.getItem(USER_KEY);
+  const raw = sessionStorage.getItem(USER_KEY);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as StaffUser;
@@ -33,14 +33,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const result = await loginRequest(email, password);
     setStoredToken(result.token);
-    localStorage.setItem(USER_KEY, JSON.stringify(result.user));
+    sessionStorage.setItem(USER_KEY, JSON.stringify(result.user));
     setToken(result.token);
     setUser(result.user);
   }, []);
 
   const logout = useCallback(() => {
     setStoredToken(null);
-    localStorage.removeItem(USER_KEY);
+    sessionStorage.removeItem(USER_KEY);
     setToken(null);
     setUser(null);
   }, []);

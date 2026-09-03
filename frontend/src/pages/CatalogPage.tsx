@@ -17,6 +17,8 @@ export function CatalogPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreateService, setShowCreateService] = useState(false);
   const [showCreatePackage, setShowCreatePackage] = useState(false);
+  const [editingService, setEditingService] = useState<Service | null>(null);
+  const [editingPackage, setEditingPackage] = useState<ServicePackage | null>(null);
 
   async function load() {
     setError(null);
@@ -112,15 +114,32 @@ export function CatalogPage() {
                     {s.category?.name} · {s.durationMinutes} min
                   </div>
                 </div>
-                <button
-                  onClick={async () => {
-                    await catalogApi.deactivateService(s.id);
-                    load();
-                  }}
-                  className="text-xs text-red-500 hover:underline"
-                >
-                  Deactivate
-                </button>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setEditingService(s)} className="text-xs text-slate-600 hover:underline">
+                    Edit
+                  </button>
+                  {s.active ? (
+                    <button
+                      onClick={async () => {
+                        await catalogApi.deactivateService(s.id);
+                        load();
+                      }}
+                      className="text-xs text-red-500 hover:underline"
+                    >
+                      Deactivate
+                    </button>
+                  ) : (
+                    <button
+                      onClick={async () => {
+                        await catalogApi.updateService(s.id, { active: true });
+                        load();
+                      }}
+                      className="text-xs text-green-600 hover:underline"
+                    >
+                      Activate
+                    </button>
+                  )}
+                </div>
               </div>
               {s.description && <p className="mt-2 text-sm text-slate-600">{s.description}</p>}
               <div className="mt-3 flex flex-wrap gap-2">
@@ -145,15 +164,32 @@ export function CatalogPage() {
                   </div>
                   <div className="text-xs text-slate-400">${p.discountedPrice}</div>
                 </div>
-                <button
-                  onClick={async () => {
-                    await catalogApi.deactivatePackage(p.id);
-                    load();
-                  }}
-                  className="text-xs text-red-500 hover:underline"
-                >
-                  Deactivate
-                </button>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setEditingPackage(p)} className="text-xs text-slate-600 hover:underline">
+                    Edit
+                  </button>
+                  {p.active ? (
+                    <button
+                      onClick={async () => {
+                        await catalogApi.deactivatePackage(p.id);
+                        load();
+                      }}
+                      className="text-xs text-red-500 hover:underline"
+                    >
+                      Deactivate
+                    </button>
+                  ) : (
+                    <button
+                      onClick={async () => {
+                        await catalogApi.updatePackage(p.id, { active: true });
+                        load();
+                      }}
+                      className="text-xs text-green-600 hover:underline"
+                    >
+                      Activate
+                    </button>
+                  )}
+                </div>
               </div>
               {p.description && <p className="mt-2 text-sm text-slate-600">{p.description}</p>}
               <div className="mt-3 flex flex-wrap gap-2">
@@ -184,6 +220,28 @@ export function CatalogPage() {
           onClose={() => setShowCreatePackage(false)}
           onCreated={() => {
             setShowCreatePackage(false);
+            load();
+          }}
+        />
+      )}
+      {editingService && (
+        <EditServiceModal
+          service={editingService}
+          categories={categories}
+          onClose={() => setEditingService(null)}
+          onSaved={() => {
+            setEditingService(null);
+            load();
+          }}
+        />
+      )}
+      {editingPackage && (
+        <EditPackageModal
+          pkg={editingPackage}
+          services={services}
+          onClose={() => setEditingPackage(null)}
+          onSaved={() => {
+            setEditingPackage(null);
             load();
           }}
         />
@@ -430,6 +488,254 @@ function CreatePackageModal({
           className="w-full rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
         >
           {saving ? "Saving..." : "Create Package"}
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+function EditServiceModal({
+  service,
+  categories,
+  onClose,
+  onSaved,
+}: {
+  service: Service;
+  categories: ServiceCategory[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(service.name);
+  const [description, setDescription] = useState(service.description ?? "");
+  const [categoryId, setCategoryId] = useState(service.categoryId);
+  const [durationMinutes, setDurationMinutes] = useState(service.durationMinutes);
+  const [prices, setPrices] = useState<Record<VehicleType, string>>(() => {
+    const initial: Record<VehicleType, string> = {
+      SEDAN: "",
+      SUV: "",
+      HATCHBACK: "",
+      VAN: "",
+      PICKUP: "",
+      OTHER: "",
+    };
+    for (const p of service.pricing) initial[p.vehicleType] = p.price;
+    return initial;
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    const pricing = VEHICLE_TYPES.filter((t) => prices[t] !== "").map((t) => ({
+      vehicleType: t,
+      price: Number(prices[t]),
+    }));
+    if (pricing.length === 0) {
+      setError("Set a price for at least one vehicle type");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await catalogApi.updateService(service.id, {
+        categoryId,
+        name,
+        description: description || undefined,
+        durationMinutes,
+        pricing,
+      });
+      onSaved();
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title="Edit Service" onClose={onClose} wide>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-600">Name</label>
+            <input
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-600">Category</label>
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            >
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-600">Description (optional)</label>
+          <input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-600">Duration (minutes)</label>
+          <input
+            type="number"
+            required
+            min={1}
+            value={durationMinutes}
+            onChange={(e) => setDurationMinutes(Number(e.target.value))}
+            className="w-40 rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="mb-2 block text-sm font-medium text-slate-600">
+            Price by vehicle type (leave blank for not offered)
+          </label>
+          <div className="grid grid-cols-3 gap-3">
+            {VEHICLE_TYPES.map((t) => (
+              <div key={t}>
+                <label className="mb-1 block text-xs text-slate-500">{t}</label>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={prices[t]}
+                  onChange={(e) => setPrices((p) => ({ ...p, [t]: e.target.value }))}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+        {error && <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+        <button
+          type="submit"
+          disabled={saving}
+          className="w-full rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save Changes"}
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+function EditPackageModal({
+  pkg,
+  services,
+  onClose,
+  onSaved,
+}: {
+  pkg: ServicePackage;
+  services: Service[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(pkg.name);
+  const [description, setDescription] = useState(pkg.description ?? "");
+  const [discountedPrice, setDiscountedPrice] = useState(pkg.discountedPrice);
+  const [selected, setSelected] = useState<Set<string>>(new Set(pkg.services.map((link) => link.serviceId)));
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (selected.size === 0) {
+      setError("Select at least one service");
+      return;
+    }
+    setSaving(true);
+    try {
+      await catalogApi.updatePackage(pkg.id, {
+        name,
+        description: description || undefined,
+        discountedPrice: Number(discountedPrice),
+        serviceIds: Array.from(selected),
+      });
+      onSaved();
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title="Edit Service Package" onClose={onClose} wide>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-600">Name</label>
+            <input
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-600">Discounted Price</label>
+            <input
+              type="number"
+              required
+              min={0}
+              step="0.01"
+              value={discountedPrice}
+              onChange={(e) => setDiscountedPrice(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-600">Description (optional)</label>
+          <input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="mb-2 block text-sm font-medium text-slate-600">Included services</label>
+          <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2">
+            {services.map((s) => (
+              <label key={s.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-slate-50">
+                <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggle(s.id)} />
+                {s.name} <span className="text-xs text-slate-400">({s.category?.name})</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        {error && <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+        <button
+          type="submit"
+          disabled={saving}
+          className="w-full rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save Changes"}
         </button>
       </form>
     </Modal>
