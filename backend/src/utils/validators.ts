@@ -107,6 +107,18 @@ export function durationMinutesField() {
   return z.number().int().positive("Must be a whole number of minutes greater than zero");
 }
 
+// ---- Free-text notes (damage marking notes, external-purchase vendor
+// notes, etc.) ----
+// Trim, collapse internal whitespace, enforce a max length, and strip
+// angle brackets so a stored note can never carry markup into wherever
+// it's later rendered.
+export function noteField(maxLength = 300) {
+  return z
+    .string()
+    .transform((val) => val.trim().replace(/\s+/g, " ").replace(/[<>]/g, ""))
+    .pipe(z.string().max(maxLength, `Must be ${maxLength} characters or fewer`));
+}
+
 // ---- Date/time ----
 // Always coerced from (and expected to be) an ISO 8601 string — the
 // frontend's date/time picker components emit this format natively via

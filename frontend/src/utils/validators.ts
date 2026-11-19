@@ -54,3 +54,22 @@ export function validatePlateNumber(raw: string): string | null {
   if (!PLATE_CHARSET.test(formatted)) return "Only letters, digits, and dashes are allowed";
   return null;
 }
+
+const NOTE_MAX_LENGTH = 300;
+
+export function formatNote(raw: string): string {
+  return raw.trim().replace(/\s+/g, " ").replace(/[<>]/g, "");
+}
+
+export function validateNote(raw: string, maxLength = NOTE_MAX_LENGTH): string | null {
+  if (formatNote(raw).length > maxLength) return `Must be ${maxLength} characters or fewer`;
+  return null;
+}
+
+export function validatePrice(raw: string): string | null {
+  if (raw.trim() === "") return "Required";
+  const n = Number(raw);
+  if (Number.isNaN(n)) return "Must be a number";
+  if (n < 0) return "Must be zero or greater";
+  return null;
+}

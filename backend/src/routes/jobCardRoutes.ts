@@ -11,9 +11,13 @@ import {
   createInventoryUsageSchema,
   createInvoiceSchema,
   jobCardNotesSchema,
+  flowBaySchema,
+  flowCooldownSchema,
+  flowTimingSchema,
+  flowExtraWorkSchema,
 } from "../utils/schemas";
 import { asyncHandler } from "../middleware/errorHandler";
-import { uploadPhoto } from "../middleware/upload";
+import { uploadDamagePhoto, uploadPhoto } from "../middleware/upload";
 
 const router = Router();
 const viewJobBoard = requireSection("jobBoard", "view");
@@ -28,6 +32,16 @@ const editJobBoard = requireSection("jobBoard", "edit");
 router.use(authenticate);
 
 router.get("/", viewJobBoard, asyncHandler(controller.list));
+
+// Booked-job flow steps (see services/jobFlowService.ts). "/flow/bays" is
+// registered before "/:id" so it isn't read as a job card id.
+router.get("/flow/bays", viewJobBoard, asyncHandler(controller.flowBays));
+router.post("/:id/flow/bay", editJobBoard, validateBody(flowBaySchema), asyncHandler(controller.checkInBay));
+router.post("/:id/flow/cooldown", editJobBoard, validateBody(flowCooldownSchema), asyncHandler(controller.startCooldown));
+router.post("/:id/flow/cooldown/done", editJobBoard, asyncHandler(controller.finishCooldown));
+router.post("/:id/flow/timing", editJobBoard, validateBody(flowTimingSchema), asyncHandler(controller.sendTiming));
+router.post("/:id/flow/extra-work", editJobBoard, validateBody(flowExtraWorkSchema), asyncHandler(controller.addExtraWork));
+router.delete("/:id/flow/extra-work/:markingId", editJobBoard, asyncHandler(controller.removeExtraWork));
 router.get("/:id", viewJobBoard, asyncHandler(controller.get));
 router.patch(
   "/:id/assign-technician",
@@ -43,8 +57,15 @@ router.post(
   validateBody(createDamageInspectionSchema),
   asyncHandler(controller.createDamageInspection)
 );
+// Not under "/:id" — the marking (and its job card save) doesn't exist
+// yet when a staff member attaches a photo while filling in the marker
+// form; this just uploads and hands back a URL to include in the
+// eventual "/:id/damage-inspection" bulk save.
+router.post("/upload-damage-photo", editJobBoard, uploadDamagePhoto.single("photo"), asyncHandler(controller.uploadDamagePhoto));
 
 router.post("/:id/photos", editJobBoard, uploadPhoto.single("photo"), asyncHandler(controller.uploadPhoto));
+router.post("/:id/photos/:photoId/send-whatsapp", editJobBoard, asyncHandler(controller.sendPhotoWhatsApp));
+router.post("/:id/send-images-whatsapp", editJobBoard, asyncHandler(controller.sendImagesWhatsApp));
 
 // Generating an invoice is an Invoices & Payments action, not a Job
 // Board one, even though it's triggered from the job card page.
@@ -61,6 +82,7 @@ router.post(
   validateBody(createInventoryUsageSchema),
   asyncHandler(inventoryController.recordUsage)
 );
+router.delete("/:id/inventory-usage/:usageId", editJobBoard, asyncHandler(inventoryController.removeUsage));
 
 // Profit is financially sensitive — same role set as the Ops Dashboard.
 router.get("/:id/profit", requireSection("opsDashboard", "view"), asyncHandler(controller.profit));

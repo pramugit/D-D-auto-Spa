@@ -21,6 +21,8 @@ router.get(
   asyncHandler(controller.listTechnicians)
 );
 router.get("/", viewStaff, asyncHandler(controller.list));
+router.get("/overview", viewStaff, asyncHandler(controller.overview));
+router.get("/:id/profile", viewStaff, asyncHandler(controller.profile));
 router.get("/:id", viewStaff, asyncHandler(controller.get));
 router.post("/", editStaff, validateBody(createUserSchema), asyncHandler(controller.create));
 router.patch("/:id", editStaff, validateBody(updateUserSchema), asyncHandler(controller.update));

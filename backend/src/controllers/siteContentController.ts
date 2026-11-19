@@ -2,7 +2,11 @@ import type { Request, Response } from "express";
 import { prisma } from "../utils/prisma";
 import { AppError } from "../utils/AppError";
 
+// Private settings stored in the same table — not readable through this public route.
+const PRIVATE_KEYS = new Set(["report-settings", "payroll-settings"]);
+
 export async function get(req: Request, res: Response) {
+  if (PRIVATE_KEYS.has(req.params.key)) throw new AppError(404, "Not found");
   const content = await prisma.siteContent.findUnique({ where: { key: req.params.key } });
   res.json(content);
 }

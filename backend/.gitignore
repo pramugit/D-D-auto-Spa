@@ -11,3 +11,8 @@ uploads/content/*
 !uploads/gallery/.gitkeep
 !uploads/content/.gitkeep
 *.log
+
+# Database backups contain customer personal data — never commit them.
+backups/
+uploads/damage-markings/*
+!uploads/damage-markings/.gitkeep

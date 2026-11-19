@@ -28,9 +28,15 @@ Monorepo with two independent apps sharing one Postgres database:
 - **File uploads** (job photos, payment slips): stored on local disk under
   `backend/uploads/` for this dev pass and served statically at `/uploads`.
   See **Next steps for production** below for where cloud storage plugs in.
-- **Notifications**: a stub service (`backend/src/services/notificationService.ts`)
-  that logs and marks records `SENT` — see the same section for where a real
-  SMS/email provider plugs in.
+- **Notifications**: SMS/EMAIL stay a stub (`backend/src/services/notificationService.ts`)
+  that logs and marks records `SENT` — see **Next steps for production** for
+  where a real provider plugs in. WhatsApp is a real integration
+  (`backend/src/services/whatsappClient.ts`, Meta Cloud API) that falls back
+  to the same stub when `WHATSAPP_API_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID`
+  aren't set. It fires automatically at every booking lifecycle milestone —
+  request received, confirmed, technician assigned, job started, quality
+  check, ready for pickup — and a technician can also send a specific job
+  photo to the customer on demand from the job card's Photos section.
 - **Payments**: bank transfer + slip upload only, verified manually by staff.
   No online payment gateway is integrated in this pass.
 - **Frontend** is two separate single-page apps sharing one React Router
@@ -174,10 +180,25 @@ Before deploying for real:
   that uploads the buffer and returns a signed/public URL instead of a
   local path. The upload middleware and the `Photo.url` / `Payment.slipUrl`
   fields don't need to change shape — just what populates them.
-- **Notifications**: `backend/src/services/notificationService.ts` is a
-  stub that logs and marks records `SENT`. Plug in Twilio (SMS) and
-  SendGrid/Postmark/Resend (email) there — the call sites (booking
-  CONFIRMED, job READY) are already wired up.
+- **Notifications**: SMS/EMAIL in `backend/src/services/notificationService.ts`
+  are still a stub that logs and marks records `SENT`. Plug in Twilio (SMS)
+  and SendGrid/Postmark/Resend (email) there — the call sites (booking
+  CONFIRMED, job READY) are already wired up. WhatsApp already sends for
+  real via `backend/src/services/whatsappClient.ts` (Meta Cloud API) once
+  you set `WHATSAPP_API_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` (see
+  `backend/.env.example`) — no code changes needed. Two things to know
+  before it's live for real customers:
+  - **Photos need a public URL.** Meta's servers fetch the image link
+    directly, so `PUBLIC_BASE_URL` must point at a publicly reachable
+    HTTPS origin (a tunnel like ngrok while testing, your real domain in
+    production) — `localhost` only works for the stub path.
+  - **Meta's messaging-window rule.** WhatsApp Business only allows
+    free-form messages (what this integration sends) to a number that
+    messaged your business first within the last 24 hours, or to a
+    handful of test recipient numbers Meta lets you verify during
+    development. Anything else requires a pre-approved message
+    **template**, which only you can create and get approved in Meta
+    Business Manager — this integration doesn't use templates yet.
 - **Online payments**: currently bank transfer + slip upload, verified
   manually by staff, is the only payment path. Add a real gateway (Stripe,
   PayHere, or a regional equivalent) as an additional `PaymentMethod`

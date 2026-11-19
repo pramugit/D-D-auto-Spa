@@ -41,6 +41,9 @@ export async function create(req: Request, res: Response) {
 }
 
 export async function update(req: Request, res: Response) {
+  if (req.user?.type === "customer" && req.user.sub !== req.params.id) {
+    throw new AppError(403, "Not your customer record");
+  }
   const customer = await prisma.customer.update({
     where: { id: req.params.id },
     data: req.body,
@@ -90,7 +93,19 @@ export async function createVehicle(req: Request, res: Response) {
   res.status(201).json(vehicle);
 }
 
+async function findOwnedVehicle(req: Request) {
+  if (req.user?.type === "customer" && req.user.sub !== req.params.id) {
+    throw new AppError(403, "Not your customer record");
+  }
+  const vehicle = await prisma.vehicle.findUnique({ where: { id: req.params.vehicleId } });
+  if (!vehicle || vehicle.customerId !== req.params.id) {
+    throw new AppError(404, "Vehicle not found");
+  }
+  return vehicle;
+}
+
 export async function updateVehicle(req: Request, res: Response) {
+  await findOwnedVehicle(req);
   const vehicle = await prisma.vehicle.update({
     where: { id: req.params.vehicleId },
     data: req.body,
@@ -99,6 +114,9 @@ export async function updateVehicle(req: Request, res: Response) {
 }
 
 export async function removeVehicle(req: Request, res: Response) {
+  await findOwnedVehicle(req);
+  const inUse = await prisma.booking.findFirst({ where: { vehicleId: req.params.vehicleId } });
+  if (inUse) throw new AppError(409, "Vehicle has booking history and cannot be deleted");
   await prisma.vehicle.delete({ where: { id: req.params.vehicleId } });
   res.status(204).send();
 }

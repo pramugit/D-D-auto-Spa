@@ -40,7 +40,7 @@ export async function listVehicles(customerId: string): Promise<Vehicle[]> {
 
 export async function createVehicle(
   customerId: string,
-  input: { make: string; model: string; year: number; plateNumber: string; color?: string; vehicleType: VehicleType }
+  input: { make: string; model: string; year: number; plateNumber: string; color?: string; vehicleType: VehicleType; mileage?: number | null }
 ): Promise<Vehicle> {
   const { data } = await apiClient.post<Vehicle>(`/customers/${customerId}/vehicles`, input);
   return data;
@@ -49,7 +49,7 @@ export async function createVehicle(
 export async function updateVehicle(
   customerId: string,
   vehicleId: string,
-  input: Partial<{ make: string; model: string; year: number; plateNumber: string; color: string; vehicleType: VehicleType }>
+  input: Partial<{ make: string; model: string; year: number; plateNumber: string; color: string; vehicleType: VehicleType; mileage: number | null }>
 ): Promise<Vehicle> {
   const { data } = await apiClient.patch<Vehicle>(`/customers/${customerId}/vehicles/${vehicleId}`, input);
   return data;

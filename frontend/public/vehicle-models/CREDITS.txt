@@ -1,0 +1,24 @@
+These 11 vehicle models (SEDAN, HATCHBACK, SUV, VAN, JEEP, CAB, LORRY,
+SEVEN_SEATER, BUS, THREE_WHEELER, MOTORBIKE) are procedurally generated in-house — extruded/
+detailed body, cabin, glass, trim, and wheel geometry built with three.js,
+not downloaded assets. No external license applies. SEVEN_SEATER reuses
+the VAN model (no distinct people-carrier shape has been modeled yet).
+
+Source/editable version + a live preview-and-export harness:
+"3D vehicle models GLB/vehicles.js" and "3D vehicle models GLB/vehicles.html"
+in the repo root (serve that folder locally and open vehicles.html — it
+has per-vehicle "Download GLB" / "Download OBJ + MTL" buttons). Re-export
+after editing vehicles.js and copy the result over the matching category
+file here (see the VEHICLES-key -> category mapping below).
+
+Category mapping (vehicles.js key -> file here):
+  sedan     -> SEDAN.glb
+  hatchback -> HATCHBACK.glb
+  suv       -> SUV.glb
+  van       -> VAN.glb, SEVEN_SEATER.glb (reused)
+  offroader -> JEEP.glb
+  pickup    -> CAB.glb
+  boxtruck  -> LORRY.glb
+  bus       -> BUS.glb
+  threewheeler -> THREE_WHEELER.glb (custom builder: one front, two rear wheels)
+  motorbike -> MOTORBIKE.glb (custom builder)

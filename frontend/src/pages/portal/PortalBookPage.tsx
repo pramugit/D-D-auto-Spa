@@ -1,12 +1,17 @@
+import { packageMinutes as packageTime } from "../../utils/duration";
+import { VEHICLE_TYPES, vehicleTypeLabel } from "../../config/vehicleTypes";
 import { useEffect, useState, type FormEvent } from "react";
+import { formatMoney } from "../../utils/money";
 import { useNavigate } from "react-router-dom";
 import * as portalApi from "../../api/portal";
 import type { Service, ServicePackage, Vehicle, VehicleType } from "../../api/types";
 import { apiErrorMessage } from "../../api/client";
 import { useCustomerAuth } from "../../hooks/useCustomerAuth";
-import { NameField, PlateNumberField } from "../../components/FormFields";
+import { MileageField, NameField, PlateNumberField, mileageValue } from "../../components/FormFields";
+import { BookingRequestFields, type RequestDetails } from "../../components/BookingRequestFields";
+import { formatMinutes } from "../../utils/duration";
+import type { ScheduleSettings } from "../../api/types";
 
-const VEHICLE_TYPES: VehicleType[] = ["SEDAN", "SUV", "HATCHBACK", "VAN", "PICKUP", "OTHER"];
 
 export function PortalBookPage() {
   const { customer } = useCustomerAuth();
@@ -20,9 +25,16 @@ export function PortalBookPage() {
 
   const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set());
   const [selectedPackages, setSelectedPackages] = useState<Set<string>>(new Set());
-  const [date, setDate] = useState("");
-  const [slots, setSlots] = useState<{ time: string; available: boolean }[]>([]);
-  const [time, setTime] = useState("");
+  const [rules, setRules] = useState<ScheduleSettings | null>(null);
+  const [details, setDetails] = useState<RequestDetails>({
+    preferredFrom: "",
+    preferredTo: "",
+    preferredTime: "ANY",
+    contactVia: "WHATSAPP",
+    contactPhone: "",
+    contactEmail: "",
+    message: "",
+  });
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -38,6 +50,13 @@ export function PortalBookPage() {
     loadVehicles().catch((err) => setError(apiErrorMessage(err)));
     portalApi.listActiveServices().then(setServices).catch((err) => setError(apiErrorMessage(err)));
     portalApi.listActivePackages().then(setPackages).catch((err) => setError(apiErrorMessage(err)));
+    portalApi.getScheduleRules().then(setRules).catch(() => {});
+    // Pre-fill how to reach them from their account.
+    if (customer)
+      portalApi
+        .getMyProfile(customer.id)
+        .then((me) => setDetails((d) => ({ ...d, contactPhone: d.contactPhone || me.phone || "", contactEmail: d.contactEmail || me.email || "" })))
+        .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer?.id]);
 
@@ -50,26 +69,16 @@ export function PortalBookPage() {
     }),
   );
 
-  useEffect(() => {
-    if (!date) {
-      setSlots([]);
-      return;
-    }
-    const serviceMinutes = Array.from(selectedServices).reduce((sum, id) => {
-      const svc = services.find((s) => s.id === id);
-      return sum + (svc?.durationMinutes ?? 0);
-    }, 0);
-    const packageMinutes = Array.from(selectedPackages).reduce((sum, id) => {
-      const pkg = packages.find((p) => p.id === id);
-      return sum + (pkg ? pkg.services.reduce((s, link) => s + link.service.durationMinutes, 0) : 0);
-    }, 0);
-    const durationMinutes = serviceMinutes + packageMinutes;
-    portalApi
-      .getAvailability(date, durationMinutes || undefined)
-      .then((res) => setSlots(res.slots))
-      .catch(() => setSlots([]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, selectedServices, selectedPackages, services, packages]);
+  const serviceMinutes = Array.from(selectedServices).reduce((sum, id) => {
+    const svc = services.find((s) => s.id === id);
+    return sum + (svc?.durationMinutes ?? 0);
+  }, 0);
+  const packageMinutes = Array.from(selectedPackages).reduce((sum, id) => {
+    const pkg = packages.find((p) => p.id === id);
+    return sum + (pkg ? packageTime(pkg) : 0);
+  }, 0);
+  const durationMinutes = serviceMinutes + packageMinutes;
+
 
   function toggleService(id: string) {
     if (packageServiceIds.has(id)) return;
@@ -132,19 +141,33 @@ export function PortalBookPage() {
       setError("Select at least one service or package");
       return;
     }
-    if (!time) {
-      setError("Select an available time slot");
+    if (!details.preferredFrom || !details.preferredTo) {
+      setError("Choose the days that suit you");
+      return;
+    }
+    if (details.contactVia !== "EMAIL" && !details.contactPhone.trim()) {
+      setError("Enter your WhatsApp number");
+      return;
+    }
+    if (details.contactVia !== "WHATSAPP" && !details.contactEmail.trim()) {
+      setError("Enter your email address");
       return;
     }
     setSubmitting(true);
     try {
-      const booking = await portalApi.createMyBooking({
+      const booking = await portalApi.requestBooking({
         vehicleId,
-        scheduledAt: time,
         items: [
           ...Array.from(selectedServices).map((id) => ({ serviceId: id })),
           ...Array.from(selectedPackages).map((id) => ({ packageId: id })),
         ],
+        preferredFrom: details.preferredFrom,
+        preferredTo: details.preferredTo,
+        preferredTime: details.preferredTime,
+        message: details.message.trim() || undefined,
+        contactPhone: details.contactVia !== "EMAIL" ? details.contactPhone.trim() : undefined,
+        contactEmail: details.contactVia !== "WHATSAPP" ? details.contactEmail.trim() : undefined,
+        contactVia: details.contactVia,
       });
       navigate(`/portal/bookings/${booking.id}`);
     } catch (err) {
@@ -156,13 +179,16 @@ export function PortalBookPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold text-slate-800">Book a Service</h1>
-      {error && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+      <h1 className="mb-1 text-2xl font-bold text-white">Book a Service</h1>
+      <p className="mb-6 text-sm text-neutral-400">
+        Choose your vehicle and services, tell us which days suit you — we'll send you the exact time on WhatsApp or email to confirm.
+      </p>
+      {error && <div className="mb-4 rounded-md bg-red-950 px-3 py-2 text-sm text-red-600">{error}</div>}
 
-      <div className="mb-6 rounded-lg border border-slate-200 bg-white p-5">
-        <h2 className="mb-3 text-sm font-semibold uppercase text-slate-500">1. Vehicle</h2>
+      <div className="mb-6 rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+        <h2 className="mb-3 text-sm font-semibold uppercase text-neutral-400">1. Vehicle</h2>
         {vehicles.length === 0 && !showAddVehicle && (
-          <div className="mb-3 text-sm text-slate-500">You don't have any vehicles on file yet.</div>
+          <div className="mb-3 text-sm text-neutral-400">You don't have any vehicles on file yet.</div>
         )}
         {vehicles.length > 0 && (
           <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -171,19 +197,19 @@ export function PortalBookPage() {
                 key={v.id}
                 onClick={() => setVehicleId(v.id)}
                 className={`rounded-md border px-3 py-2 text-left text-sm ${
-                  vehicleId === v.id ? "border-slate-800 bg-slate-50" : "border-slate-200 hover:bg-slate-50"
+                  vehicleId === v.id ? "border-neutral-800 bg-black" : "border-neutral-800 hover:bg-black"
                 }`}
               >
-                <div className="font-medium text-slate-800">{v.plateNumber}</div>
-                <div className="text-xs text-slate-500">
-                  {v.make} {v.model} ({v.vehicleType})
+                <div className="font-medium text-white">{v.plateNumber}</div>
+                <div className="text-xs text-neutral-400">
+                  {v.make} {v.model} ({vehicleTypeLabel(v.vehicleType)})
                 </div>
               </button>
             ))}
           </div>
         )}
         {!showAddVehicle ? (
-          <button onClick={() => setShowAddVehicle(true)} className="text-sm text-slate-600 hover:underline">
+          <button onClick={() => setShowAddVehicle(true)} className="text-sm text-neutral-300 hover:underline">
             + Add a vehicle
           </button>
         ) : (
@@ -200,21 +226,21 @@ export function PortalBookPage() {
         )}
       </div>
 
-      <div className="mb-6 rounded-lg border border-slate-200 bg-white p-5">
-        <h2 className="mb-3 text-sm font-semibold uppercase text-slate-500">2. Services</h2>
+      <div className="mb-6 rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+        <h2 className="mb-3 text-sm font-semibold uppercase text-neutral-400">2. Services</h2>
         {!selectedVehicle && (
-          <div className="mb-3 text-sm text-slate-400">Select a vehicle above to see pricing for your vehicle.</div>
+          <div className="mb-3 text-sm text-neutral-500">Select a vehicle above to see pricing for your vehicle.</div>
         )}
 
         {packages.length > 0 && (
           <div className="mb-4">
-            <div className="mb-2 text-xs font-semibold uppercase text-slate-400">Bundled packages</div>
+            <div className="mb-2 text-xs font-semibold uppercase text-neutral-500">Bundled packages</div>
             <div className="grid gap-2 sm:grid-cols-2">
               {packages.map((p) => (
                 <label
                   key={p.id}
                   className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${
-                    selectedPackages.has(p.id) ? "border-sky-400 bg-sky-50" : "border-slate-200 hover:bg-slate-50"
+                    selectedPackages.has(p.id) ? "border-red-500 bg-red-950" : "border-neutral-800 hover:bg-black"
                   }`}
                 >
                   <input
@@ -225,11 +251,11 @@ export function PortalBookPage() {
                   />
                   <span className="flex-1">
                     <span className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-slate-800">{p.name}</span>
-                      <span className="shrink-0 text-xs font-semibold text-sky-600">${p.discountedPrice}</span>
+                      <span className="font-medium text-white">{p.name}</span>
+                      <span className="shrink-0 text-xs font-semibold text-red-500">{formatMoney(p.discountedPrice)}</span>
                     </span>
-                    {p.description && <span className="mt-0.5 block text-xs text-slate-500">{p.description}</span>}
-                    <span className="mt-0.5 block text-xs text-slate-400">
+                    {p.description && <span className="mt-0.5 block text-xs text-neutral-400">{p.description}</span>}
+                    <span className="mt-0.5 block text-xs text-neutral-500">
                       Includes: {p.services.map((link) => link.service.name).join(", ")}
                     </span>
                   </span>
@@ -240,7 +266,7 @@ export function PortalBookPage() {
         )}
 
         {services.length === 0 ? (
-          <div className="text-sm text-slate-400">No services are available to book right now.</div>
+          <div className="text-sm text-neutral-500">No services are available to book right now.</div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             <ServiceGroup
@@ -264,55 +290,21 @@ export function PortalBookPage() {
           </div>
         )}
         {(selectedServices.size > 0 || selectedPackages.size > 0) && (
-          <div className="mt-4 text-right text-sm font-semibold text-slate-800">Estimated total: ${total.toFixed(2)}</div>
+          <div className="mt-4 text-right text-sm font-semibold text-white">
+            Estimated total: {formatMoney(total)}
+            {durationMinutes > 0 && <span className="ml-2 font-normal text-neutral-400">· takes about {formatMinutes(durationMinutes)}</span>}
+          </div>
         )}
       </div>
 
-      <div className="mb-6 rounded-lg border border-slate-200 bg-white p-5">
-        <h2 className="mb-3 text-sm font-semibold uppercase text-slate-500">3. Date &amp; Time</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Date</label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => {
-                setDate(e.target.value);
-                setTime("");
-              }}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Available time slots</label>
-            <select
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-              disabled={!date}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
-            >
-              <option value="">Select a time...</option>
-              {slots
-                .filter((s) => s.available)
-                .map((s) => (
-                  <option key={s.time} value={s.time}>
-                    {new Date(s.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </option>
-                ))}
-            </select>
-            {date && slots.filter((s) => s.available).length === 0 && (
-              <div className="mt-1 text-xs text-amber-600">No slots available for this date.</div>
-            )}
-          </div>
-        </div>
-      </div>
+      <BookingRequestFields value={details} onChange={setDetails} rules={rules} />
 
       <button
         onClick={handleConfirm}
         disabled={submitting}
-        className="w-full rounded-md bg-slate-800 px-4 py-3 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+        className="w-full rounded-full bg-red-600 px-4 py-3 text-sm font-semibold text-white shadow transition hover:bg-red-700 disabled:opacity-50"
       >
-        {submitting ? "Booking..." : "Confirm Booking"}
+        {submitting ? "Sending..." : "Send booking request"}
       </button>
     </div>
   );
@@ -336,9 +328,9 @@ function ServiceGroup({
   packageServiceIds: Set<string>;
 }) {
   return (
-    <div className="rounded-md border border-slate-200 p-3">
-      <div className="mb-2 text-xs font-semibold uppercase text-slate-400">{title}</div>
-      {services.length === 0 && <div className="text-xs text-slate-400">No {title.toLowerCase()} services available.</div>}
+    <div className="rounded-md border border-neutral-800 p-3">
+      <div className="mb-2 text-xs font-semibold uppercase text-neutral-500">{title}</div>
+      {services.length === 0 && <div className="text-xs text-neutral-500">No {title.toLowerCase()} services available.</div>}
       {services.map((s) => {
         const includedInPackage = packageServiceIds.has(s.id);
         const price = priceFor(s);
@@ -346,8 +338,8 @@ function ServiceGroup({
         return (
           <label
             key={s.id}
-            className={`mb-1 flex items-center justify-between rounded px-2 py-1.5 text-sm hover:bg-slate-50 ${
-              disabled ? "text-slate-400" : ""
+            className={`mb-1 flex items-center justify-between rounded px-2 py-1.5 text-sm hover:bg-black ${
+              disabled ? "text-neutral-500" : ""
             }`}
           >
             <span className="flex items-center gap-2">
@@ -363,7 +355,7 @@ function ServiceGroup({
               {includedInPackage
                 ? "Included in package"
                 : price
-                  ? `$${price}`
+                  ? `Rs. ${price}`
                   : vehicleSelected
                     ? "Not offered for this vehicle"
                     : "Select vehicle"}
@@ -379,7 +371,7 @@ function AddVehicleForm({
   onAdd,
   onCancel,
 }: {
-  onAdd: (input: { make: string; model: string; year: number; plateNumber: string; color?: string; vehicleType: VehicleType }) => Promise<void>;
+  onAdd: (input: { make: string; model: string; year: number; plateNumber: string; color?: string; vehicleType: VehicleType; mileage?: number }) => Promise<void>;
   onCancel: () => void;
 }) {
   const [make, setMake] = useState("");
@@ -387,6 +379,7 @@ function AddVehicleForm({
   const [year, setYear] = useState(new Date().getFullYear());
   const [plateNumber, setPlateNumber] = useState("");
   const [vehicleType, setVehicleType] = useState<VehicleType>("SEDAN");
+  const [mileage, setMileage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -395,7 +388,7 @@ function AddVehicleForm({
     setError(null);
     setSaving(true);
     try {
-      await onAdd({ make, model, year, plateNumber, vehicleType });
+      await onAdd({ make, model, year, plateNumber, vehicleType, mileage: mileageValue(mileage) });
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
@@ -404,8 +397,8 @@ function AddVehicleForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-3 space-y-2 rounded-md border border-slate-200 p-3">
-      <div className="grid grid-cols-2 gap-2">
+    <form onSubmit={handleSubmit} className="mt-3 space-y-2 rounded-md border border-neutral-800 p-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <NameField required value={make} onChange={setMake} placeholder="Make" />
         <NameField required value={model} onChange={setModel} placeholder="Model" />
         <input
@@ -417,34 +410,35 @@ function AddVehicleForm({
           placeholder="Year"
           value={year}
           onChange={(e) => setYear(Number(e.target.value))}
-          className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+          className="rounded-md border border-neutral-700 px-2 py-1.5 text-sm"
         />
         <PlateNumberField required value={plateNumber} onChange={setPlateNumber} placeholder="Plate Number" />
         <select
           value={vehicleType}
           onChange={(e) => setVehicleType(e.target.value as VehicleType)}
-          className="col-span-2 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+          className="rounded-md border border-neutral-700 px-2 py-1.5 text-sm"
         >
           {VEHICLE_TYPES.map((t) => (
             <option key={t} value={t}>
-              {t}
+              {vehicleTypeLabel(t)}
             </option>
           ))}
         </select>
+        <MileageField value={mileage} onChange={setMileage} placeholder="Mileage (optional)" className="w-full rounded-md border border-neutral-700 px-2 py-1.5 text-sm" />
       </div>
-      {error && <div className="rounded-md bg-red-50 px-2 py-1 text-xs text-red-600">{error}</div>}
+      {error && <div className="rounded-md bg-red-950 px-2 py-1 text-xs text-red-600">{error}</div>}
       <div className="flex gap-2">
         <button
           type="submit"
           disabled={saving}
-          className="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+          className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
         >
           {saving ? "Saving..." : "Add Vehicle"}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-black"
         >
           Cancel
         </button>

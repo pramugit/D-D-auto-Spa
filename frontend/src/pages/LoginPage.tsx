@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { BRAND } from "../config/brand";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useCustomerAuth } from "../hooks/useCustomerAuth";
@@ -34,46 +35,46 @@ export function LoginPage() {
   }
 
   return (
-    <div className="font-display flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="animate-fade-in-up w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="font-display flex min-h-screen items-center justify-center bg-black px-4">
+      <div className="animate-fade-in-up w-full max-w-sm rounded-xl border border-neutral-800 bg-neutral-900 p-6 shadow-sm">
         <Link
           to="/"
-          className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-blue-950 transition hover:text-sky-500"
+          className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-white transition hover:text-red-500"
         >
           &larr; Back
         </Link>
-        <h1 className="mb-1 text-xl font-bold text-blue-950">
-          Auto<span className="text-sky-500">Body</span> Service Station
+        <h1 className="mb-2">
+          <img src={BRAND.logo} alt={BRAND.name} className="h-auto w-full max-w-[280px]" />
         </h1>
-        <p className="mb-6 text-sm text-slate-500">Staff sign in</p>
+        <p className="mb-6 text-sm text-neutral-400">Staff sign in</p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Email</label>
+            <label className="mb-1 block text-sm font-medium text-neutral-300">Email</label>
             <input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-sky-500 focus:outline-none"
+              className="w-full rounded-md border border-neutral-700 px-3 py-2 text-sm focus:border-red-600 focus:outline-none"
               placeholder="you@autobody.test"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Password</label>
+            <label className="mb-1 block text-sm font-medium text-neutral-300">Password</label>
             <input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-sky-500 focus:outline-none"
+              className="w-full rounded-md border border-neutral-700 px-3 py-2 text-sm focus:border-red-600 focus:outline-none"
               placeholder="••••••••"
             />
           </div>
-          {error && <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+          {error && <div className="rounded-md bg-red-950 px-3 py-2 text-sm text-red-600">{error}</div>}
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-full bg-sky-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-600 disabled:opacity-50"
+            className="w-full rounded-full bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
           >
             {loading ? "Signing in..." : "Sign in"}
           </button>
@@ -85,7 +86,7 @@ export function LoginPage() {
             customerLogout();
             navigate("/portal/login");
           }}
-          className="mt-4 block text-center text-sm text-slate-500 hover:underline"
+          className="mt-4 block text-center text-sm text-neutral-400 hover:underline"
         >
           Are you a customer? Go to the customer portal
         </a>

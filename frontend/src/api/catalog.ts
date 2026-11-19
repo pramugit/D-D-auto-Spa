@@ -70,6 +70,7 @@ export async function createPackage(input: {
   name: string;
   description?: string;
   discountedPrice: number;
+  durationMinutes?: number | null;
   serviceIds: string[];
 }): Promise<ServicePackage> {
   const { data } = await apiClient.post<ServicePackage>("/service-packages", input);
@@ -78,7 +79,7 @@ export async function createPackage(input: {
 
 export async function updatePackage(
   id: string,
-  input: Partial<{ name: string; description: string; discountedPrice: number; serviceIds: string[]; active: boolean }>
+  input: Partial<{ name: string; description: string; discountedPrice: number; durationMinutes: number | null; serviceIds: string[]; active: boolean }>
 ): Promise<ServicePackage> {
   const { data } = await apiClient.patch<ServicePackage>(`/service-packages/${id}`, input);
   return data;

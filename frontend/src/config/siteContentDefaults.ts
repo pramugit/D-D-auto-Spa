@@ -2,9 +2,10 @@ import type { SiteContentData } from "../api/siteContent";
 
 export const DEFAULT_SITE_CONTENT: SiteContentData = {
   contact: {
-    location: "Colombo, Sri Lanka",
+    location: "431/D, Ihala Kosgama, Kosgama",
     email: "hello@autobody.test",
     hours: "Mon - Sat: 8:00 AM - 6:00 PM",
+    phone: "+94 71 969 7014 / +94 72 310 2373",
   },
   hero: {
     slides: [
@@ -34,7 +35,7 @@ export const DEFAULT_SITE_CONTENT: SiteContentData = {
     image:
       "https://plus.unsplash.com/premium_photo-1661443450192-f589ab785b62?fm=jpg&q=60&w=800&auto=format&fit=crop",
     paragraph:
-      "AutoBody is a dedicated exterior & interior detailing station — wash, wax, polish, paint correction, ceramic coating and dent/scratch removal. No mechanical repairs, just a car that looks its absolute best.",
+      "D & D Auto Spa is a dedicated exterior & interior detailing station — wash, wax, polish, paint correction, ceramic coating and dent/scratch removal. No mechanical repairs, just a car that looks its absolute best.",
     bullets: [
       "We care about your car as much as you do.",
       "Certified & trained staff using proper equipment.",

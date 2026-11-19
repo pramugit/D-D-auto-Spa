@@ -31,7 +31,11 @@ export type PermissionSection =
   | "inventory"
   | "opsDashboard"
   | "staff"
-  | "siteGallery";
+  | "siteGallery"
+  | "jobNotifications"
+  | "damageTypes"
+  | "attendance"
+  | "payroll";
 
 export interface SectionPermission {
   label: string;
@@ -51,7 +55,7 @@ export const PERMISSIONS: Record<PermissionSection, SectionPermission> = {
     edit: ["ADMIN", "MANAGER", "RECEPTIONIST"],
   },
   jobBoard: {
-    label: "Job Board",
+    label: "Booking Job Board",
     view: ["ADMIN", "MANAGER", "TECHNICIAN", "RECEPTIONIST"],
     edit: ["ADMIN", "MANAGER", "TECHNICIAN"], // receptionist: read-only
   },
@@ -67,7 +71,7 @@ export const PERMISSIONS: Record<PermissionSection, SectionPermission> = {
   },
   inventory: {
     label: "Inventory",
-    view: ["ADMIN", "MANAGER"],
+    view: ["ADMIN", "MANAGER", "TECHNICIAN"], // technician: read-only, granted by admin
     edit: ["ADMIN", "MANAGER"],
   },
   opsDashboard: {
@@ -82,6 +86,38 @@ export const PERMISSIONS: Record<PermissionSection, SectionPermission> = {
   },
   siteGallery: {
     label: "Website Gallery",
+    view: ["ADMIN"],
+    edit: ["ADMIN"],
+  },
+  jobNotifications: {
+    label: "Job Notifications",
+    view: ["ADMIN", "MANAGER"],
+    edit: ["ADMIN", "MANAGER"],
+  },
+  // The damage-type catalog (name + default repair price) shown on the
+  // Service Catalog page. Reading the catalog to populate a marking's
+  // dropdown is a shared utility open to any staff who can edit the Job
+  // Board (see damageTypeRoutes.ts's GET, same carve-out as "list
+  // services") — this view/edit pair governs only the catalog's own
+  // management page and its write endpoints.
+  damageTypes: {
+    label: "Damage Type Catalog",
+    view: ["ADMIN", "MANAGER"],
+    edit: ["ADMIN", "MANAGER"],
+  },
+  // Every role clocks themselves in/out, so the section itself is open
+  // to all — the "see every staff member's attendance" admin/manager
+  // overview is a further carve-out enforced in attendanceRoutes.ts, not
+  // by this matrix (same pattern as the "list services" shared-utility
+  // carve-outs noted above).
+  attendance: {
+    label: "Attendance",
+    view: ["ADMIN", "MANAGER", "TECHNICIAN", "RECEPTIONIST"],
+    edit: ["ADMIN", "MANAGER", "TECHNICIAN", "RECEPTIONIST"],
+  },
+  // Salary figures — kept as restricted as siteGallery.
+  payroll: {
+    label: "Payroll",
     view: ["ADMIN"],
     edit: ["ADMIN"],
   },

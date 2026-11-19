@@ -1,16 +1,62 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
+}
+
+/* Keep anchor targets clear of the sticky landing-page nav bar. */
+html {
+  scroll-padding-top: 8.5rem;
 }
 
 body {
   margin: 0;
-  font-family: "Poppins", system-ui, "Segoe UI", Roboto, sans-serif;
+  background: #000;
+  color: #fff;
+  font-family: "Playfair Display", Georgia, "Times New Roman", serif;
+}
+
+::selection {
+  background: #dc2626;
+  color: #fff;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #000;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #dc2626;
 }
 
 .font-display {
-  font-family: "Poppins", system-ui, "Segoe UI", Roboto, sans-serif;
+  font-family: "Playfair Display", Georgia, "Times New Roman", serif;
+}
+
+/* Printing an invoice: hide everything except the invoice document itself
+   (sidebar/header nav, buttons, the rest of the page) — see .no-print and
+   InvoiceDocument's own print button. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+  .invoice-document {
+    border: none !important;
+    box-shadow: none !important;
+  }
 }
 
 @keyframes fade-in-up {
@@ -39,4 +85,108 @@ body {
 
 .animate-marquee {
   animation: marquee 60s linear infinite;
+}
+
+@keyframes blob-float {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(3%, -4%) scale(1.08);
+  }
+  66% {
+    transform: translate(-2%, 3%) scale(0.96);
+  }
+}
+
+.animate-blob {
+  animation: blob-float 12s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  from {
+    transform: translateX(-150%);
+  }
+  to {
+    transform: translateX(150%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2.5s ease-in-out infinite;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-pop-in {
+  animation: pop-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Job Board quick-view panel */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-row-in {
+  animation: row-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes count-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-count-pop {
+  animation: count-pop 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Respect the OS "reduce motion" setting everywhere. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in-up,
+  .animate-pop-in,
+  .animate-blob,
+  .animate-shimmer,
+  .animate-marquee,
+  .animate-row-in,
+  .animate-count-pop {
+    animation: none !important;
+  }
 }

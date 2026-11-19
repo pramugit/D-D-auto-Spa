@@ -5,3 +5,12 @@ build/
 .env.local
 *.log
 .DS_Store
+
+# Local database backups (contain customer data)
+backups/
+
+# Project reference material — not part of the app (kept local only)
+/D&D auto spa112.pdf
+/damage inspection .mp4
+/3D vehicle models GLB/
+/mokups/

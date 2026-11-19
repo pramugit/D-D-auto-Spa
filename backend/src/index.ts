@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { startDailyReportScheduler } from "./services/reportSummaryService";
 import path from "path";
 import express from "express";
 import cors from "cors";
@@ -16,14 +17,23 @@ import userRoutes from "./routes/userRoutes";
 import bookingRoutes from "./routes/bookingRoutes";
 import jobCardRoutes from "./routes/jobCardRoutes";
 import damageInspectionRoutes from "./routes/damageInspectionRoutes";
+import publicInspectionRoutes from "./routes/publicInspectionRoutes";
+import damageTypeRoutes from "./routes/damageTypeRoutes";
+import damageMarkingRoutes from "./routes/damageMarkingRoutes";
 import invoiceRoutes from "./routes/invoiceRoutes";
 import paymentRoutes from "./routes/paymentRoutes";
+import bankAccountRoutes from "./routes/bankAccountRoutes";
 import inventoryRoutes from "./routes/inventoryRoutes";
 import reviewRoutes from "./routes/reviewRoutes";
 import notificationRoutes from "./routes/notificationRoutes";
+import jobNotificationRoutes from "./routes/jobNotificationRoutes";
 import reportRoutes from "./routes/reportRoutes";
 import siteImageRoutes from "./routes/siteImageRoutes";
 import siteContentRoutes from "./routes/siteContentRoutes";
+import webauthnRoutes from "./routes/webauthnRoutes";
+import attendanceRoutes from "./routes/attendanceRoutes";
+import leaveRoutes from "./routes/leaveRoutes";
+import payrollRoutes from "./routes/payrollRoutes";
 
 const app = express();
 
@@ -59,17 +69,27 @@ app.use("/bookings", bookingRoutes);
 app.use("/job-cards", jobCardRoutes);
 app.use("/job-cards", reviewRoutes);
 app.use("/damage-inspections", damageInspectionRoutes);
+app.use("/public/inspections", publicInspectionRoutes);
+app.use("/damage-types", damageTypeRoutes);
+app.use("/damage-markings", damageMarkingRoutes);
 app.use("/invoices", invoiceRoutes);
 app.use("/payments", paymentRoutes);
+app.use("/bank-accounts", bankAccountRoutes);
 app.use("/inventory-items", inventoryRoutes);
 app.use("/notifications", notificationRoutes);
+app.use("/job-notifications", jobNotificationRoutes);
 app.use("/reports", reportRoutes);
 app.use("/site-images", siteImageRoutes);
 app.use("/site-content", siteContentRoutes);
+app.use("/webauthn", webauthnRoutes);
+app.use("/attendance", attendanceRoutes);
+app.use("/leaves", leaveRoutes);
+app.use("/payroll", payrollRoutes);
 
 app.use(errorHandler);
 
 const port = Number(process.env.PORT ?? 4000);
 app.listen(port, () => {
   console.log(`Backend listening on http://localhost:${port}`);
+  startDailyReportScheduler();
 });

@@ -47,6 +47,9 @@ export async function loginStaff(email: string, password: string) {
   if (!valid) {
     throw new AppError(401, "Invalid email or password");
   }
+  if (!user.active) {
+    throw new AppError(403, "This staff account has been deactivated — contact the admin");
+  }
   const token = signToken({ type: "staff", sub: user.id, role: user.role });
   return {
     token,

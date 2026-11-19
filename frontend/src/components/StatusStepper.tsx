@@ -12,7 +12,7 @@ const STEPS: { status: BookingStatus; label: string }[] = [
 export function StatusStepper({ status }: { status: BookingStatus }) {
   if (status === "CANCELLED") {
     return (
-      <div className="rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
+      <div className="rounded-md bg-red-950 px-3 py-2 text-sm font-medium text-red-600">
         This booking was cancelled.
       </div>
     );
@@ -31,20 +31,20 @@ export function StatusStepper({ status }: { status: BookingStatus }) {
               <div
                 className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
                   done
-                    ? "bg-green-600 text-white"
+                    ? "bg-red-600 text-white"
                     : active
-                      ? "bg-slate-800 text-white"
-                      : "bg-slate-200 text-slate-500"
+                      ? "bg-black text-white"
+                      : "bg-neutral-800 text-neutral-400"
                 }`}
               >
                 {done ? "✓" : idx + 1}
               </div>
-              <div className={`mt-1 whitespace-nowrap text-[11px] ${active ? "font-semibold text-slate-800" : "text-slate-400"}`}>
+              <div className={`mt-1 whitespace-nowrap text-[11px] ${active ? "font-semibold text-white" : "text-neutral-500"}`}>
                 {step.label}
               </div>
             </div>
             {idx < STEPS.length - 1 && (
-              <div className={`mx-1 h-0.5 flex-1 ${idx < currentIndex ? "bg-green-600" : "bg-slate-200"}`} />
+              <div className={`mx-1 h-0.5 flex-1 ${idx < currentIndex ? "bg-red-600" : "bg-neutral-800"}`} />
             )}
           </div>
         );

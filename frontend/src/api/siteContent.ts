@@ -25,6 +25,8 @@ export interface SiteContentData {
     location: string;
     email: string;
     hours: string;
+    /** Shown as call links in the top bar; several numbers separated by "/". */
+    phone?: string;
   };
   hero: {
     slides: HeroSlide[];
@@ -62,4 +64,22 @@ export async function uploadContentImage(file: File) {
     headers: { "Content-Type": "multipart/form-data" },
   });
   return data.url;
+}
+
+/** The shop's scan-to-pay QR image (e.g. a LankaQR merchant code), shown at
+ *  the counter on Daily Jobs' payment step. Stored as site content key
+ *  "payment-qr"; null until an admin uploads one. */
+export interface PaymentQr {
+  imageUrl: string;
+  note?: string;
+}
+
+export async function getPaymentQr(): Promise<PaymentQr | null> {
+  const { data } = await apiClient.get<{ data: PaymentQr } | null>("/site-content/payment-qr");
+  return data?.data ?? null;
+}
+
+export async function setPaymentQr(qr: PaymentQr): Promise<PaymentQr> {
+  const { data } = await apiClient.put<{ data: PaymentQr }>("/site-content/payment-qr", { data: qr });
+  return data.data;
 }

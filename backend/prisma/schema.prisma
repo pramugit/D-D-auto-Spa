@@ -16,13 +16,24 @@ enum StaffRole {
   RECEPTIONIST
 }
 
+// 9 categories the 4-view diagram set (see frontend's
+// components/vehicleDiagrams/) has a dedicated silhouette for. Replaces
+// the older PICKUP/OTHER split — PICKUP became CAB (a closer real-world
+// match) and OTHER was retired since every vehicle now maps to a real
+// category (see the migration that introduced this: PICKUP -> CAB,
+// OTHER -> SEDAN as the safest default, with a NOTICE logged per row).
 enum VehicleType {
   SEDAN
-  SUV
   HATCHBACK
+  SUV
   VAN
-  PICKUP
-  OTHER
+  JEEP
+  CAB
+  LORRY
+  SEVEN_SEATER
+  BUS
+  THREE_WHEELER
+  MOTORBIKE
 }
 
 enum ServiceCategoryName {
@@ -51,9 +62,52 @@ enum InspectionStage {
   POST_SERVICE
 }
 
+// Which of the vehicle's 4 diagram views a DamageMarking belongs to — each
+// view is its own per-vehicle-category silhouette with its own coordinate
+// space (see frontend's components/vehicleDiagrams/), so a marking's x/y
+// is only meaningful together with this field. Renamed from the older
+// VehicleView (LEFT/RIGHT -> LEFT_SIDE/RIGHT_SIDE) when the 4-view
+// per-category diagram set replaced the single generic diagram.
+enum DiagramView {
+  FRONT
+  REAR
+  LEFT_SIDE
+  RIGHT_SIDE
+}
+
+// NOT_APPLICABLE: ordinary pre-existing-damage documentation (liability
+// protection) — never billed, never needs a customer decision.
+// PENDING/APPROVED/DECLINED: an additional-repair offer the customer must
+// act on (see DamageMarking.isAdditionalRepairOffer) — only APPROVED ones
+// become invoice line items (see invoiceService.createInvoiceForJobCard).
+enum DamageApprovalStatus {
+  NOT_APPLICABLE
+  PENDING
+  APPROVED
+  DECLINED
+}
+
+// How bad the damage at one marking is — set by whoever places the
+// marker, independent of DamageApprovalStatus (which tracks the
+// customer's billing decision, not how serious the damage looks).
+enum DamageSeverity {
+  MINOR
+  MODERATE
+  SEVERE
+}
+
+// INTERNAL_STOCK deducts InventoryItem.quantityInStock and costs
+// item.costPerUnit; EXTERNAL_PURCHASE deducts nothing and costs the
+// entered externalCost instead — see InventoryUsage.
+enum InventorySourceType {
+  INTERNAL_STOCK
+  EXTERNAL_PURCHASE
+}
+
 enum PhotoType {
   BEFORE
   AFTER
+  PROGRESS
 }
 
 enum InvoiceStatus {
@@ -66,6 +120,7 @@ enum PaymentMethod {
   CASH
   CARD
   BANK_TRANSFER
+  QR
 }
 
 enum PaymentStatus {
@@ -75,13 +130,18 @@ enum PaymentStatus {
 }
 
 enum NotificationType {
+  BOOKING_RECEIVED
   BOOKING_CONFIRMED
+  TECHNICIAN_ASSIGNED
   JOB_STARTED
+  JOB_QUALITY_CHECK
   JOB_READY
   JOB_COMPLETED
   BOOKING_CANCELLED
   PAYMENT_VERIFIED
+  PHOTO_UPDATE
   GENERAL
+  INSPECTION_REPORT
 }
 
 enum NotificationChannel {
@@ -93,27 +153,88 @@ enum NotificationChannel {
 enum NotificationStatus {
   PENDING
   SENT
+  FAILED
+}
+
+// Admin-facing (never customer-facing) — distinct from Notification above,
+// which is always addressed to a customer. PHOTOS_SENT logs a technician's
+// explicit "send images to customer" action; PHOTOS_OVERDUE is the 15-minute
+// warning raised when nobody has sent images for a photo-relevant status.
+enum JobNotificationType {
+  PHOTOS_UPLOADED
+  PHOTOS_SENT
+  PHOTOS_OVERDUE
+  // A customer approved or declined an additional-repair offer — staff
+  // need to know so the job card isn't left waiting silently on a
+  // decision that already came in.
+  DAMAGE_MARKING_DECIDED
+  // The customer confirmed a damage inspection report on the approval
+  // link — the job can start.
+  INSPECTION_CONFIRMED
+}
+
+enum SalaryPaymentStatus {
+  PENDING
+  PAID
 }
 
 // ---------- Models ----------
 
 model User {
-  id           String    @id @default(uuid())
-  name         String
-  email        String    @unique
-  phone        String?
-  passwordHash String
-  role         StaffRole @default(TECHNICIAN)
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  phone         String?
+  passwordHash  String
+  // 4-digit PIN that unlocks the Inventory section (bcrypt hash; null =
+  // not set yet). Consecutive wrong guesses are counted so a 4-digit
+  // space can't be brute-forced — see webauthnController.unlockWithPin.
+  inventoryPinHash           String?
+  inventoryPinFailedAttempts Int       @default(0)
+  role          StaffRole @default(TECHNICIAN)
   // Only meaningful for TECHNICIAN role; null means "no rate set" and is
   // treated as 0 labor cost everywhere it's used, never an error.
-  hourlyRate   Decimal?  @db.Decimal(10, 2)
-  createdAt    DateTime  @default(now())
+  hourlyRate    Decimal?  @db.Decimal(10, 2)
+  // A fixed monthly wage, independent of hourlyRate (which only feeds
+  // job-card labor costing). Null means "not on payroll yet" — payroll
+  // generation skips a staff member with no monthlySalary set rather
+  // than defaulting them to 0.
+  monthlySalary Decimal?  @db.Decimal(10, 2)
+  createdAt     DateTime  @default(now())
 
-  inspectionsPerformed DamageInspection[]    @relation("InspectedBy")
-  paymentsVerified     Payment[]             @relation("VerifiedBy")
+  // ── Staff management ──
+  // Deactivated staff can't log in; their history (attendance, payroll,
+  // jobs) is kept. Preferred over deleting, which cascades that history.
+  active         Boolean   @default(true)
+  employeeCode   String?   @unique
+  joinedAt       DateTime? @db.Date
+  nic            String?
+  address        String?
+  emergencyName  String?
+  emergencyPhone String?
+  bankName       String?
+  bankAccount    String?
+  // Daily shift, "HH:MM" shop local time — used for late arrivals,
+  // overtime and absence in payroll.
+  shiftStart     String    @default("08:00")
+  shiftEnd       String    @default("18:00")
+  // Sri Lanka EPF/ETF: members get 8% (employee) deducted and the employer
+  // pays 12% EPF + 3% ETF, on the basic salary earned (see payrollService).
+  epfMember      Boolean   @default(true)
+  epfNumber      String?
+
+  inspectionsPerformed DamageInspection[]   @relation("InspectedBy")
+  paymentsVerified     Payment[]            @relation("VerifiedBy")
   jobCards             JobCardTechnician[]
   bookingActivityLogs  BookingActivityLog[]
-  ownedBookings        Booking[]             @relation("BookingCurrentOwner")
+  ownedBookings        Booking[]            @relation("BookingCurrentOwner")
+  jobNotifications     JobNotification[]
+  webauthnCredentials  WebAuthnCredential[]
+  attendanceRecords    AttendanceRecord[]
+  salaryPayments       SalaryPayment[]
+  leaves               StaffLeave[]         @relation("LeaveOf")
+  leavesDecided        StaffLeave[]         @relation("LeaveDecidedBy")
+  stockMovements       StockMovement[]
 
   @@map("users")
 }
@@ -145,6 +266,8 @@ model Vehicle {
   plateNumber String      @unique
   color       String?
   vehicleType VehicleType
+  /// Latest odometer reading in km (updated at each visit).
+  mileage     Int?
 
   bookings Booking[]
 
@@ -162,17 +285,18 @@ model ServiceCategory {
 }
 
 model Service {
-  id              String   @id @default(uuid())
+  id              String          @id @default(uuid())
   categoryId      String
   category        ServiceCategory @relation(fields: [categoryId], references: [id])
   name            String
   description     String?
   durationMinutes Int
-  active          Boolean  @default(true)
+  active          Boolean         @default(true)
 
   pricing         ServicePricing[]
   bookingServices BookingService[]
   packageServices ServicePackageService[]
+  consumables     ServiceConsumable[]
 
   @@index([categoryId])
   @@map("services")
@@ -192,11 +316,13 @@ model ServicePricing {
 }
 
 model ServicePackage {
-  id              String   @id @default(uuid())
+  id              String  @id @default(uuid())
   name            String
   description     String?
-  discountedPrice Decimal  @db.Decimal(10, 2)
-  active          Boolean  @default(true)
+  discountedPrice Decimal @db.Decimal(10, 2)
+  /// Minutes the whole package takes. Null = its services added up.
+  durationMinutes Int?
+  active          Boolean @default(true)
 
   services        ServicePackageService[]
   bookingServices BookingService[]
@@ -225,6 +351,12 @@ model Bay {
   @@map("bays")
 }
 
+enum BookingRequestStage {
+  REQUESTED
+  TIME_PROPOSED
+  ACCEPTED
+}
+
 model Booking {
   id          String        @id @default(uuid())
   customerId  String
@@ -236,6 +368,29 @@ model Booking {
   bay         Bay?          @relation(fields: [bayId], references: [id])
   status      BookingStatus @default(PENDING)
   createdAt   DateTime      @default(now())
+  // A same-day walk-in job created from the Daily Jobs board, as opposed to
+  // a scheduled appointment made through Bookings — same status pipeline
+  // and JobCard lifecycle either way, this only affects which board the
+  // job shows up on. See createWalkInJob in bookingService.ts.
+  isWalkIn    Boolean       @default(false)
+  /// Odometer reading (km) when the vehicle came in for this job.
+  mileage     Int?
+
+  // ── Booking requests (customer portal) ──
+  // The customer asks for services + preferred dates; staff pick the exact
+  // time (TIME_PROPOSED — the bay is held) and the customer confirms it in
+  // the portal (ACCEPTED → status CONFIRMED). Null for bookings staff
+  // created directly and for walk-ins.
+  requestStage    BookingRequestStage?
+  preferredFrom   String? // "YYYY-MM-DD"
+  preferredTo     String? // "YYYY-MM-DD"
+  preferredTime   String? // MORNING | AFTERNOON | ANY
+  customerMessage String?
+  contactPhone    String?
+  contactEmail    String?
+  contactVia      String? // WHATSAPP | EMAIL | BOTH
+  staffNote       String?
+  proposedAt      DateTime?
 
   // Whoever is currently responsible for the booking's CURRENT status
   // (e.g. the manager who claimed it for quality check). Reset to null on
@@ -243,8 +398,8 @@ model Booking {
   currentOwnerUserId String?
   currentOwner       User?   @relation("BookingCurrentOwner", fields: [currentOwnerUserId], references: [id])
 
-  services BookingService[]
-  jobCard  JobCard?
+  services     BookingService[]
+  jobCard      JobCard?
   activityLogs BookingActivityLog[]
 
   @@index([customerId])
@@ -291,20 +446,38 @@ model BookingService {
 }
 
 model JobCard {
-  id            String        @id @default(uuid())
-  bookingId     String        @unique
-  booking       Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  startedAt     DateTime?
-  completedAt   DateTime?
-  status        BookingStatus @default(CONFIRMED)
-  notes         String?
+  id          String        @id @default(uuid())
+  bookingId   String        @unique
+  booking     Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  startedAt   DateTime?
+  completedAt DateTime?
+  status      BookingStatus @default(CONFIRMED)
+  notes       String?
 
-  technicians       JobCardTechnician[]
-  damageInspections DamageInspection[]
-  photos            Photo[]
-  inventoryUsages   InventoryUsage[]
-  invoice           Invoice?
-  review            Review?
+  // ── Booked-job flow (job card page, steps 1, 2 and 6) ──
+  // Step 1: when the car was brought into its bay (Booking.bayId).
+  bayCheckedInAt    DateTime?
+  // Step 2: engine/body cool-down before washing or polishing.
+  cooldownStartedAt DateTime?
+  cooldownMinutes   Int?
+  cooldownDoneAt    DateTime?
+  // Step 6: "LOUNGE" (customer waits) or "LEAVE" (customer comes back),
+  // the ready time promised to them, and when it was WhatsApped.
+  customerWaiting   String?
+  promisedReadyAt   DateTime?
+  timingSentAt      DateTime?
+
+  technicians           JobCardTechnician[]
+  damageInspections     DamageInspection[]
+  photos                Photo[]
+  inventoryUsages       InventoryUsage[]
+  stockMovements        StockMovement[]
+  // Set once the service recipes' materials were taken out of stock (on
+  // Start Job), so it can never happen twice for the same job.
+  consumablesDeductedAt DateTime?
+  invoice               Invoice?
+  review                Review?
+  jobNotifications      JobNotification[]
 
   @@map("job_cards")
 }
@@ -321,19 +494,108 @@ model JobCardTechnician {
 }
 
 model DamageInspection {
-  id                  String           @id @default(uuid())
-  jobCardId           String
-  jobCard             JobCard          @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
-  stage               InspectionStage
-  diagramMarkings     Json
-  inspectedByUserId   String
-  inspectedByUser     User             @relation("InspectedBy", fields: [inspectedByUserId], references: [id])
+  id                   String          @id @default(uuid())
+  jobCardId            String
+  jobCard              JobCard         @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  stage                InspectionStage
+  inspectedByUserId    String
+  inspectedByUser      User            @relation("InspectedBy", fields: [inspectedByUserId], references: [id])
   customerAcknowledged Boolean         @default(false)
-  acknowledgedAt      DateTime?
-  createdAt           DateTime         @default(now())
+  acknowledgedAt       DateTime?
+  createdAt            DateTime        @default(now())
+  // Customer approval link: an unguessable token for the public,
+  // no-login page /inspection/<token> where the customer reviews the
+  // damage (with photos), approves/declines repair offers and confirms
+  // the report. Created on first share; null until then.
+  approvalToken        String?         @unique
+  // Last time it was sent to the customer on WhatsApp (null = never sent;
+  // a link may still have been copied or opened on the shop device).
+  sentToCustomerAt     DateTime?
+  // "CUSTOMER_LINK" (customer confirmed on the approval page) or
+  // "STAFF_IN_PERSON" (front desk recorded it) — who confirmed it.
+  acknowledgedVia      String?
+  // Optional comment the customer typed on the approval page.
+  customerComment      String?
+
+  markings DamageMarking[]
 
   @@index([jobCardId])
   @@map("damage_inspections")
+}
+
+// A reusable catalog of named damage kinds with a default repair price
+// (e.g. "Small Scratch", "Dent - Large") — admin/manager managed (see
+// config/permissions.ts's damageTypes section) — so staff pick from a
+// dropdown instead of free-typing a price every time.
+model DamageType {
+  id           String              @id @default(uuid())
+  name         String              @unique
+  defaultPrice Decimal             @db.Decimal(10, 2)
+  /// Minutes to repair one marked spot of this damage (adds to the job's time).
+  repairMinutes Int                @default(30)
+  category     ServiceCategoryName
+  createdAt    DateTime            @default(now())
+
+  markings DamageMarking[]
+
+  @@map("damage_types")
+}
+
+// One marked spot on the car diagram. Two very different use cases share
+// this table (see the GLOBAL CONSTRAINTS note in the phase plan this was
+// built from — keep both working):
+//   - Plain damage documentation (isAdditionalRepairOffer: false) — pure
+//     liability-protection record of pre-existing condition, never priced
+//     or billed, approvalStatus always NOT_APPLICABLE.
+//   - An additional-repair offer (isAdditionalRepairOffer: true) — has a
+//     price, starts PENDING, and the customer must approve or decline it
+//     (see damageMarkingController.decide) before it can ever appear on
+//     an invoice (only APPROVED ones do — see invoiceService).
+model DamageMarking {
+  id                      String               @id @default(uuid())
+  damageInspectionId      String
+  damageInspection        DamageInspection     @relation(fields: [damageInspectionId], references: [id], onDelete: Cascade)
+  // Legacy field from the 4-view (then single-photo) diagram eras — no
+  // longer shown to users. Always FRONT on markings created since the
+  // move to the rotatable 3D model (x/y/z below are a point on the model
+  // surface now, not a 2D pick on one of 4 fixed views).
+  view                    DiagramView          @default(LEFT_SIDE)
+  // A click/tap point on the vehicle's 3D model surface, in the model's
+  // local object space (matches the coordinate system baked into each
+  // .glb in /public/vehicle-models — see config/vehicleModels.ts). Older
+  // rows predate the 3D model and hold 0-100 percentage coordinates on a
+  // flat image instead; those are handled as a fallback at render time,
+  // not reinterpreted here.
+  x                       Float?
+  y                       Float?
+  z                       Float?
+  // Named part from an earlier fixed-checklist experiment (superseded by
+  // the 4-view diagram system, which went back to x/y click coordinates
+  // as the primary "where") — present only on markings created while
+  // that experiment was active.
+  zone                    String?
+  damageTypeId            String?
+  damageType              DamageType?          @relation(fields: [damageTypeId], references: [id])
+  note                    String?
+  suggestedPrice          Decimal?             @db.Decimal(10, 2)
+  isAdditionalRepairOffer Boolean              @default(false)
+  approvalStatus          DamageApprovalStatus @default(NOT_APPLICABLE)
+  // How bad it looks, set by whoever placed the marker — independent of
+  // approvalStatus (billing decision) above.
+  severity                DamageSeverity       @default(MINOR)
+  // A close-up of this specific spot, uploaded at marking time (see
+  // POST /job-cards/upload-damage-photo) — distinct from the job card's
+  // own overall Before/After photo set (Photo model below).
+  photoUrl                String?
+  // Extra ("emergency") work found while the job was in progress — added
+  // from step 8 of the booked-job flow, not by editing the inspection, so
+  // it has no point on the 3D model and the inspection editor leaves it alone.
+  foundDuringWork         Boolean              @default(false)
+  createdAt               DateTime             @default(now())
+  decidedAt               DateTime?
+
+  @@index([damageInspectionId])
+  @@map("damage_markings")
 }
 
 model Photo {
@@ -349,26 +611,90 @@ model Photo {
 }
 
 model InventoryItem {
-  id               String   @id @default(uuid())
-  name             String
-  unit             String
-  quantityInStock  Decimal  @db.Decimal(10, 2)
-  reorderLevel     Decimal  @db.Decimal(10, 2)
-  costPerUnit      Decimal  @default(0) @db.Decimal(10, 2)
+  id              String   @id @default(uuid())
+  name            String
+  unit            String
+  quantityInStock Decimal  @db.Decimal(10, 2)
+  reorderLevel    Decimal  @db.Decimal(10, 2)
+  costPerUnit     Decimal  @default(0) @db.Decimal(10, 2)
+  // Practical extras for the automated reorder list (all optional).
+  category        String?
+  supplierName    String?
+  supplierPhone   String?
+  // Fixed amount to order each time; null = suggest from recent usage.
+  reorderQuantity Decimal? @db.Decimal(10, 2)
+  createdAt       DateTime @default(now())
 
-  usages InventoryUsage[]
+  usages      InventoryUsage[]
+  movements   StockMovement[]
+  consumables ServiceConsumable[]
 
   @@map("inventory_items")
 }
 
+enum StockMovementType {
+  RECEIVED // stock bought in (or opening stock)
+  JOB_USAGE // used on a job — automatic from service recipes, or manual
+  ADJUSTMENT // stock count correction
+}
+
+// Every change to an item's stock, so the level can always be explained:
+// who, when, why, and the balance afterwards. `quantity` is signed
+// (+ in, − out).
+model StockMovement {
+  id           String            @id @default(uuid())
+  itemId       String
+  item         InventoryItem     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  type         StockMovementType
+  quantity     Decimal           @db.Decimal(10, 2)
+  balanceAfter Decimal           @db.Decimal(10, 2)
+  unitCost     Decimal?          @db.Decimal(10, 2)
+  note         String?
+  jobCardId    String?
+  jobCard      JobCard?          @relation(fields: [jobCardId], references: [id], onDelete: SetNull)
+  userId       String?
+  user         User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt    DateTime          @default(now())
+
+  @@index([itemId, createdAt])
+  @@index([createdAt])
+  @@map("stock_movements")
+}
+
+// A service's "recipe": how much of each stock item one job of that
+// service uses. Deducted automatically when the job starts.
+model ServiceConsumable {
+  id        String        @id @default(uuid())
+  serviceId String
+  service   Service       @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  itemId    String
+  item      InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  quantity  Decimal       @db.Decimal(10, 3)
+
+  @@unique([serviceId, itemId])
+  @@map("service_consumables")
+}
+
 model InventoryUsage {
-  id            String        @id @default(uuid())
-  jobCardId     String
-  jobCard       JobCard       @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
-  itemId        String
-  item          InventoryItem @relation(fields: [itemId], references: [id])
-  quantityUsed  Decimal       @db.Decimal(10, 2)
-  createdAt     DateTime      @default(now())
+  id                 String              @id @default(uuid())
+  jobCardId          String
+  jobCard            JobCard             @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  // Null when sourceType is EXTERNAL_PURCHASE — an outside purchase isn't
+  // tied to a stocked InventoryItem at all (see externalName/externalCost
+  // below).
+  itemId             String?
+  item               InventoryItem?      @relation(fields: [itemId], references: [id])
+  quantityUsed       Decimal             @db.Decimal(10, 2)
+  // A part bought specifically for this job because requested quantity
+  // exceeded on-hand stock — billed to the customer 1:1 (see
+  // invoiceService.createInvoiceForJobCard) since it's a pass-through
+  // cost, not covered by the flat service price. INTERNAL_STOCK instead
+  // deducts quantityInStock and costs item.costPerUnit, as before.
+  sourceType         InventorySourceType @default(INTERNAL_STOCK)
+  externalName       String?
+  externalCost       Decimal?            @db.Decimal(10, 2)
+  externalVendorNote String?
+  createdAt          DateTime            @default(now())
 
   @@index([jobCardId])
   @@index([itemId])
@@ -376,15 +702,19 @@ model InventoryUsage {
 }
 
 model Invoice {
-  id        String        @id @default(uuid())
-  jobCardId String        @unique
-  jobCard   JobCard       @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
-  subtotal  Decimal       @db.Decimal(10, 2)
-  tax       Decimal       @db.Decimal(10, 2)
-  discount  Decimal       @db.Decimal(10, 2) @default(0)
-  total     Decimal       @db.Decimal(10, 2)
-  status    InvoiceStatus @default(UNPAID)
-  createdAt DateTime      @default(now())
+  id            String        @id @default(uuid())
+  // Human-readable sequential number for the printable invoice document
+  // (formatted client-side as "INV-000123") — separate from the uuid id,
+  // which stays the API/URL identifier.
+  invoiceNumber Int           @unique @default(autoincrement())
+  jobCardId     String        @unique
+  jobCard       JobCard       @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  subtotal      Decimal       @db.Decimal(10, 2)
+  tax           Decimal       @db.Decimal(10, 2)
+  discount      Decimal       @default(0) @db.Decimal(10, 2)
+  total         Decimal       @db.Decimal(10, 2)
+  status        InvoiceStatus @default(UNPAID)
+  createdAt     DateTime      @default(now())
 
   payments Payment[]
 
@@ -405,6 +735,24 @@ model Payment {
 
   @@index([invoiceId])
   @@map("payments")
+}
+
+// Company bank account(s) shown to a customer when they choose to pay an
+// invoice by bank transfer (see PortalBookingDetailPage) — admin-managed
+// from the Invoices & Payments page instead of being hardcoded in the UI.
+// "active" lets staff retire an old account without losing its history on
+// past payment instructions.
+model BankAccount {
+  id            String   @id @default(uuid())
+  bankName      String
+  accountName   String
+  accountNumber String
+  branch        String?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("bank_accounts")
 }
 
 model Review {
@@ -450,4 +798,139 @@ model Notification {
 
   @@index([customerId])
   @@map("notifications")
+}
+
+// Admin Portal's "Job Notifications" feed. One row per technician
+// "send images to customer" action (PHOTOS_SENT) or per 15-minute
+// no-images-sent warning (PHOTOS_OVERDUE) — see jobNotificationService.ts.
+model JobNotification {
+  id            String              @id @default(uuid())
+  jobCardId     String
+  jobCard       JobCard             @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  type          JobNotificationType
+  message       String
+  statusAtEvent BookingStatus
+  technicianId  String?
+  technician    User?               @relation(fields: [technicianId], references: [id])
+  createdAt     DateTime            @default(now())
+
+  @@index([jobCardId, createdAt])
+  @@map("job_notifications")
+}
+
+// A registered WebAuthn/Passkey authenticator (device fingerprint,
+// Face ID, security key) used as the "unlock" factor gating the
+// Inventory section — separate from normal login, which stays
+// email+password (see authService.ts). One user can register several
+// devices (phone + laptop, etc.); any one of them unlocks.
+model WebAuthnCredential {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Base64url-encoded credential ID from the authenticator — how a
+  // later assertion is matched back to this row.
+  credentialId String    @unique
+  publicKey    Bytes
+  // Signature counter reported by the authenticator, used to detect a
+  // cloned credential (a replayed/duplicated assertion reports a
+  // counter that didn't advance).
+  counter      BigInt
+  deviceName   String
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+
+  @@index([userId])
+  @@map("webauthn_credentials")
+}
+
+// A self clock-in/clock-out session. Purely a presence record — it
+// does not feed into payroll (see SalaryPayment), which pays a fixed
+// monthlySalary regardless of hours logged here.
+model AttendanceRecord {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clockIn   DateTime
+  clockOut  DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, clockIn])
+  @@map("attendance_records")
+}
+
+// One row per (staff, calendar month) — generated on demand via an
+// admin "Generate payroll" action (this codebase has no cron/scheduler;
+// see jobNotificationService.ts's note on lazy/on-demand computation).
+// baseSalary is a snapshot of User.monthlySalary at generation time, so
+// a later salary change doesn't silently rewrite an already-generated
+// or already-paid month.
+model SalaryPayment {
+  id               String              @id @default(uuid())
+  userId           String
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // First-of-month date representing the paid month, e.g. 2026-09-01.
+  month            DateTime            @db.Date
+  baseSalary       Decimal             @db.Decimal(10, 2)
+  // Worked out from attendance + leave when payroll is generated (and
+  // recalculated while still PENDING). See payrollService.
+  workingDays      Int                 @default(0)
+  daysPresent      Int                 @default(0)
+  lateDays         Int                 @default(0)
+  paidLeaveDays    Decimal             @default(0) @db.Decimal(5, 1)
+  unpaidDays       Decimal             @default(0) @db.Decimal(5, 1)
+  hoursWorked      Decimal             @default(0) @db.Decimal(7, 2)
+  overtimeHours    Decimal             @default(0) @db.Decimal(7, 2)
+  overtimePay      Decimal             @default(0) @db.Decimal(10, 2)
+  absenceDeduction Decimal             @default(0) @db.Decimal(10, 2)
+  // Manual adjustments by the admin before paying.
+  bonus            Decimal             @default(0) @db.Decimal(10, 2)
+  otherDeductions  Decimal             @default(0) @db.Decimal(10, 2)
+  note             String?
+  // EPF/ETF, worked out with the rest of the row. epfBase = basic salary
+  // earned (base − unpaid-day deduction); overtime and bonus excluded.
+  epfBase          Decimal             @default(0) @db.Decimal(10, 2)
+  epfEmployee      Decimal             @default(0) @db.Decimal(10, 2)
+  epfEmployer      Decimal             @default(0) @db.Decimal(10, 2)
+  etfEmployer      Decimal             @default(0) @db.Decimal(10, 2)
+  netPay           Decimal             @default(0) @db.Decimal(10, 2)
+  status           SalaryPaymentStatus @default(PENDING)
+  paidAt           DateTime?
+  createdAt        DateTime            @default(now())
+
+  @@unique([userId, month])
+  @@index([month])
+  @@map("salary_payments")
+}
+
+enum LeaveType {
+  ANNUAL
+  CASUAL
+  SICK
+  UNPAID
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Time off. Approved ANNUAL/CASUAL/SICK days count as paid; UNPAID days
+// (and unexplained absences) are deducted in payroll.
+model StaffLeave {
+  id          String      @id @default(uuid())
+  userId      String
+  user        User        @relation("LeaveOf", fields: [userId], references: [id], onDelete: Cascade)
+  type        LeaveType
+  startDate   DateTime    @db.Date
+  endDate     DateTime    @db.Date
+  reason      String?
+  status      LeaveStatus @default(PENDING)
+  decidedById String?
+  decidedBy   User?       @relation("LeaveDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt   DateTime?
+  createdAt   DateTime    @default(now())
+
+  @@index([userId, startDate])
+  @@map("staff_leaves")
 }

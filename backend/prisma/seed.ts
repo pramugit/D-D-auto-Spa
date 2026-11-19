@@ -7,17 +7,23 @@ const prisma = new PrismaClient();
 const STAFF_PASSWORD = "StaffPass123!";
 const CUSTOMER_PASSWORD = "CustomerPass123!";
 
-const VEHICLE_TYPES: VehicleType[] = ["SEDAN", "SUV", "HATCHBACK", "VAN", "PICKUP", "OTHER"];
+const VEHICLE_TYPES: VehicleType[] = ["SEDAN", "HATCHBACK", "SUV", "VAN", "JEEP", "CAB", "LORRY", "SEVEN_SEATER", "BUS", "THREE_WHEELER", "MOTORBIKE"];
 
 /** Even pricing across every vehicle type, with a surcharge for larger vehicles. */
 function pricingAll(base: number, bigSurcharge = 10) {
   const surcharge: Record<VehicleType, number> = {
     SEDAN: 0,
     HATCHBACK: 0,
-    OTHER: 0,
+    JEEP: 0,
     SUV: bigSurcharge,
     VAN: bigSurcharge + 5,
-    PICKUP: bigSurcharge + 5,
+    CAB: bigSurcharge + 5,
+    SEVEN_SEATER: bigSurcharge + 5,
+    LORRY: bigSurcharge + 15,
+    BUS: bigSurcharge + 15,
+    // Smaller vehicles cost less: about 70% / 50% of the car price.
+    THREE_WHEELER: -Math.round(base * 0.3),
+    MOTORBIKE: -Math.round(base * 0.5),
   };
   return VEHICLE_TYPES.map((vehicleType) => ({ vehicleType, price: base + surcharge[vehicleType] }));
 }
@@ -117,10 +123,26 @@ async function seedCatalog() {
 
   const createdServices: Record<string, string> = {};
   let newCount = 0;
+  let backfilledPricingCount = 0;
   for (const svc of services) {
     const existing = await prisma.service.findFirst({ where: { name: svc.name } });
     if (existing) {
       createdServices[svc.name] = existing.id;
+      // A service that already existed (from a prior seed run) may still
+      // be missing pricing for vehicle types added since — e.g. JEEP,
+      // LORRY, SEVEN_SEATER, BUS didn't exist when this service was first
+      // created. Backfill only the missing (serviceId, vehicleType) rows
+      // rather than skipping the service entirely.
+      const existingPricing = await prisma.servicePricing.findMany({
+        where: { serviceId: existing.id },
+        select: { vehicleType: true },
+      });
+      const covered = new Set(existingPricing.map((p) => p.vehicleType));
+      const missing = svc.pricing.filter((p) => !covered.has(p.vehicleType));
+      if (missing.length > 0) {
+        await prisma.servicePricing.createMany({ data: missing.map((p) => ({ serviceId: existing.id, ...p })) });
+        backfilledPricingCount += missing.length;
+      }
       continue;
     }
     const created = await prisma.service.create({
@@ -135,7 +157,9 @@ async function seedCatalog() {
     createdServices[svc.name] = created.id;
     newCount += 1;
   }
-  console.log(`Seeded ${services.length} services (${newCount} new, ${services.length - newCount} already existed)`);
+  console.log(
+    `Seeded ${services.length} services (${newCount} new, ${services.length - newCount} already existed, ${backfilledPricingCount} pricing rows backfilled for newer vehicle types)`
+  );
 
   const packageName = "Complete Detail Package";
   const existingPackage = await prisma.servicePackage.findFirst({ where: { name: packageName } });
@@ -183,9 +207,10 @@ async function seedSiteImages() {
 async function seedSiteContent() {
   const landingContent = {
     contact: {
-      location: "Colombo, Sri Lanka",
+      location: "431/D, Ihala Kosgama, Kosgama",
       email: "hello@autobody.test",
       hours: "Mon - Sat: 8:00 AM - 6:00 PM",
+      phone: "+94 71 969 7014 / +94 72 310 2373",
     },
     hero: {
       slides: [
@@ -214,7 +239,7 @@ async function seedSiteContent() {
     about: {
       image: "https://plus.unsplash.com/premium_photo-1661443450192-f589ab785b62?fm=jpg&q=60&w=800&auto=format&fit=crop",
       paragraph:
-        "AutoBody is a dedicated exterior & interior detailing station — wash, wax, polish, paint correction, ceramic coating and dent/scratch removal. No mechanical repairs, just a car that looks its absolute best.",
+        "D & D Auto Spa is a dedicated exterior & interior detailing station — wash, wax, polish, paint correction, ceramic coating and dent/scratch removal. No mechanical repairs, just a car that looks its absolute best.",
       bullets: [
         "We care about your car as much as you do.",
         "Certified & trained staff using proper equipment.",
@@ -288,7 +313,7 @@ async function seedCustomers() {
       address: "8 Negombo Road, Wattala",
       vehicles: [
         { make: "Suzuki", model: "Alto", year: 2019, plateNumber: "CAE-9012", color: "Silver", vehicleType: "HATCHBACK" },
-        { make: "Toyota", model: "Hilux", year: 2022, plateNumber: "CAF-3456", color: "Grey", vehicleType: "PICKUP" },
+        { make: "Toyota", model: "Hilux", year: 2022, plateNumber: "CAF-3456", color: "Grey", vehicleType: "CAB" },
       ],
     },
   ];

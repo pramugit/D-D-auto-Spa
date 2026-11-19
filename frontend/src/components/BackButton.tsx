@@ -20,7 +20,7 @@ export function BackButton() {
     <button
       type="button"
       onClick={() => navigate(-1)}
-      className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-blue-950 transition hover:text-sky-500"
+      className="no-print mb-4 inline-flex items-center gap-1 text-sm font-semibold text-white transition hover:text-red-500"
     >
       <ChevronLeftIcon />
       Back

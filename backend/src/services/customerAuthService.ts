@@ -46,6 +46,19 @@ export async function registerCustomer(input: {
   };
 }
 
+export async function changeCustomerPassword(customerId: string, currentPassword: string, newPassword: string) {
+  const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+  if (!customer || !customer.passwordHash) {
+    throw new AppError(400, "No password set for this account");
+  }
+  const valid = await bcrypt.compare(currentPassword, customer.passwordHash);
+  if (!valid) {
+    throw new AppError(401, "Current password is incorrect");
+  }
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await prisma.customer.update({ where: { id: customerId }, data: { passwordHash } });
+}
+
 export async function loginCustomer(email: string, password: string) {
   const customer = await prisma.customer.findUnique({ where: { email } });
   if (!customer || !customer.passwordHash) {

@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "damage_markings" ADD COLUMN     "zone" TEXT,
+ALTER COLUMN "x" DROP NOT NULL,
+ALTER COLUMN "y" DROP NOT NULL;
+

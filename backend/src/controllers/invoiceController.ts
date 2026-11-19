@@ -6,7 +6,24 @@ import { safeCustomerSelect } from "../utils/prismaSelects";
 
 const invoiceInclude = {
   payments: true,
-  jobCard: { include: { booking: { include: { customer: { select: safeCustomerSelect }, vehicle: true } } } },
+  jobCard: {
+    include: {
+      booking: {
+        include: {
+          customer: { select: safeCustomerSelect },
+          vehicle: true,
+          // Needed for the printable invoice document's line-item table
+          // (see InvoiceDocument.tsx) — not previously included here.
+          services: { include: { service: true, package: true } },
+        },
+      },
+      // Approved damage-repair charges and externally-purchased parts are
+      // both billable line items on the invoice document (see
+      // invoiceService.createInvoiceForJobCard for how they're totalled).
+      damageInspections: { include: { markings: { include: { damageType: true } } } },
+      inventoryUsages: true,
+    },
+  },
 } as const;
 
 export async function createForJobCard(req: Request, res: Response) {
@@ -43,7 +60,7 @@ export async function createPayment(req: Request, res: Response) {
     throw new AppError(403, "Not your invoice");
   }
 
-  const { method, amount } = req.body as { method: "CASH" | "CARD" | "BANK_TRANSFER"; amount: number };
+  const { method, amount } = req.body as { method: "CASH" | "CARD" | "BANK_TRANSFER" | "QR"; amount: number };
 
   if (method === "BANK_TRANSFER" && !req.file) {
     throw new AppError(400, "A payment slip file is required for bank transfer payments");
@@ -51,6 +68,10 @@ export async function createPayment(req: Request, res: Response) {
   if (method !== "BANK_TRANSFER" && req.user?.type === "customer") {
     throw new AppError(403, "Customers may only submit bank transfer payments; cash/card is recorded by staff in person");
   }
+  // QR (scan-to-pay at the counter) is recorded by staff after they see the
+  // payment confirmation on the customer's phone, so — like cash/card — it
+  // is VERIFIED immediately. Bank transfers still need a manager/admin to
+  // check the slip against the bank statement.
 
   const payment = await prisma.payment.create({
     data: {

@@ -11,6 +11,7 @@ interface CustomerAuthContextValue {
   register: (input: { name: string; phone: string; email: string; password: string; address?: string }) => Promise<void>;
   logout: () => void;
   refreshLoyalty: (points: number) => void;
+  refreshProfile: (patch: Partial<Pick<CustomerSummary, "name" | "email">>) => void;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -64,9 +65,26 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const refreshProfile = useCallback((patch: Partial<Pick<CustomerSummary, "name" | "email">>) => {
+    setCustomer((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...patch };
+      localStorage.setItem(CUSTOMER_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const value = useMemo(
-    () => ({ customer, isAuthenticated: !!token && !!customer, login, register, logout, refreshLoyalty }),
-    [customer, token, login, register, logout, refreshLoyalty]
+    () => ({
+      customer,
+      isAuthenticated: !!token && !!customer,
+      login,
+      register,
+      logout,
+      refreshLoyalty,
+      refreshProfile,
+    }),
+    [customer, token, login, register, logout, refreshLoyalty, refreshProfile]
   );
 
   return <CustomerAuthContext.Provider value={value}>{children}</CustomerAuthContext.Provider>;

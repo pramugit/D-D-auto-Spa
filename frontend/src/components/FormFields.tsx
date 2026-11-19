@@ -10,7 +10,7 @@ interface FieldProps {
   className?: string;
 }
 
-const baseInputClass = "w-full rounded-md border border-slate-300 px-3 py-2 text-sm";
+const baseInputClass = "w-full rounded-md border border-neutral-700 px-3 py-2 text-sm";
 
 /** Trims/collapses/title-cases on blur (e.g. "  john   doe  " -> "John Doe"); rejects digits/most punctuation. */
 export function NameField({ label, value, onChange, required, placeholder, className }: FieldProps) {
@@ -19,7 +19,7 @@ export function NameField({ label, value, onChange, required, placeholder, class
 
   return (
     <div className={className}>
-      {label && <label className="mb-1 block text-sm font-medium text-slate-600">{label}</label>}
+      {label && <label className="mb-1 block text-sm font-medium text-neutral-300">{label}</label>}
       <input
         required={required}
         value={value}
@@ -29,7 +29,7 @@ export function NameField({ label, value, onChange, required, placeholder, class
           setTouched(true);
           if (value.trim()) onChange(formatName(value));
         }}
-        className={`${baseInputClass} ${error ? "border-red-400" : ""}`}
+        className={`${baseInputClass} ${error ? "border-red-800" : ""}`}
       />
       {error && <div className="mt-1 text-xs text-red-600">{error}</div>}
     </div>
@@ -43,7 +43,7 @@ export function PhoneField({ label, value, onChange, required, placeholder, clas
 
   return (
     <div className={className}>
-      {label && <label className="mb-1 block text-sm font-medium text-slate-600">{label}</label>}
+      {label && <label className="mb-1 block text-sm font-medium text-neutral-300">{label}</label>}
       <input
         required={required}
         value={value}
@@ -54,7 +54,7 @@ export function PhoneField({ label, value, onChange, required, placeholder, clas
           onChange(filtered);
         }}
         onBlur={() => setTouched(true)}
-        className={`${baseInputClass} ${error ? "border-red-400" : ""}`}
+        className={`${baseInputClass} ${error ? "border-red-800" : ""}`}
       />
       {error && <div className="mt-1 text-xs text-red-600">{error}</div>}
     </div>
@@ -68,7 +68,7 @@ export function EmailField({ label, value, onChange, required, placeholder, clas
 
   return (
     <div className={className}>
-      {label && <label className="mb-1 block text-sm font-medium text-slate-600">{label}</label>}
+      {label && <label className="mb-1 block text-sm font-medium text-neutral-300">{label}</label>}
       <input
         type="email"
         required={required}
@@ -76,7 +76,7 @@ export function EmailField({ label, value, onChange, required, placeholder, clas
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
         onBlur={() => setTouched(true)}
-        className={`${baseInputClass} ${error ? "border-red-400" : ""}`}
+        className={`${baseInputClass} ${error ? "border-red-800" : ""}`}
       />
       {error && <div className="mt-1 text-xs text-red-600">{error}</div>}
     </div>
@@ -90,16 +90,40 @@ export function PlateNumberField({ label, value, onChange, required, placeholder
 
   return (
     <div className={className}>
-      {label && <label className="mb-1 block text-sm font-medium text-slate-600">{label}</label>}
+      {label && <label className="mb-1 block text-sm font-medium text-neutral-300">{label}</label>}
       <input
         required={required}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(formatPlateNumber(e.target.value))}
         onBlur={() => setTouched(true)}
-        className={`${baseInputClass} uppercase ${error ? "border-red-400" : ""}`}
+        className={`${baseInputClass} uppercase ${error ? "border-red-800" : ""}`}
       />
       {error && <div className="mt-1 text-xs text-red-600">{error}</div>}
     </div>
   );
 }
+
+/** Odometer reading in km. Holds digits only; shows thousands separators. */
+export function MileageField({ label, value, onChange, required, placeholder, className }: FieldProps) {
+  const shown = value ? Number(value).toLocaleString("en-US") : "";
+  return (
+    <div>
+      {label && <label className="mb-1 block text-sm font-medium text-neutral-300">{label}</label>}
+      <div className="relative">
+        <input
+          inputMode="numeric"
+          required={required}
+          value={shown}
+          onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 7))}
+          placeholder={placeholder ?? "e.g. 45,200"}
+          className={`${className ?? baseInputClass} pr-10`}
+        />
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-500">km</span>
+      </div>
+    </div>
+  );
+}
+
+/** "45200" -> 45200, "" -> undefined. */
+export const mileageValue = (s: string): number | undefined => (s === "" ? undefined : Number(s));

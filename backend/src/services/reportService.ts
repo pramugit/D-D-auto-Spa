@@ -144,18 +144,22 @@ export async function getBayUtilization(from: Date, to: Date) {
   return results;
 }
 
-/** Job card ids whose invoice was generated within [from, to]. */
-async function getJobCardIdsInvoicedInRange(from?: Date, to?: Date): Promise<string[]> {
+/** Job card ids whose invoice was generated within [from, to] — optionally
+ *  only Daily Jobs walk-ins (isWalkIn true) or only bookings (false). */
+async function getJobCardIdsInvoicedInRange(from?: Date, to?: Date, isWalkIn?: boolean): Promise<string[]> {
   const invoices = await prisma.invoice.findMany({
-    where: { createdAt: { gte: from, lte: to } },
+    where: {
+      createdAt: { gte: from, lte: to },
+      ...(isWalkIn !== undefined ? { jobCard: { booking: { isWalkIn } } } : {}),
+    },
     select: { jobCardId: true },
   });
   return invoices.map((i) => i.jobCardId);
 }
 
 /** Total profit across every invoiced job card in a date range. */
-export async function getProfitOverTime(from?: Date, to?: Date) {
-  const jobCardIds = await getJobCardIdsInvoicedInRange(from, to);
+export async function getProfitOverTime(from?: Date, to?: Date, isWalkIn?: boolean) {
+  const jobCardIds = await getJobCardIdsInvoicedInRange(from, to, isWalkIn);
   let totalRevenue = 0;
   let totalMaterialCost = 0;
   let totalLaborCost = 0;
@@ -382,6 +386,7 @@ export async function getSatisfactionAlerts() {
           booking: {
             select: {
               id: true,
+              isWalkIn: true,
               customer: { select: { id: true, name: true } },
               vehicle: { select: { plateNumber: true, make: true, model: true } },
             },
@@ -398,6 +403,7 @@ export async function getSatisfactionAlerts() {
     createdAt: review.createdAt,
     bookingId: review.jobCard.booking.id,
     jobCardId: review.jobCard.id,
+    isWalkIn: review.jobCard.booking.isWalkIn,
     customer: review.jobCard.booking.customer,
     vehicle: review.jobCard.booking.vehicle,
   }));

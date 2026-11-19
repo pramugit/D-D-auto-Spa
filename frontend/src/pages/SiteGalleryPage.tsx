@@ -8,9 +8,9 @@ import { apiErrorMessage, resolveMediaUrl } from "../api/client";
 
 function SectionCard({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5">
-      <h2 className="text-lg font-semibold text-slate-800">{title}</h2>
-      {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+    <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      <h2 className="text-lg font-semibold text-white">{title}</h2>
+      {description && <p className="mt-1 text-sm text-neutral-400">{description}</p>}
       <div className="mt-4 space-y-4">{children}</div>
     </div>
   );
@@ -19,14 +19,14 @@ function SectionCard({ title, description, children }: { title: string; descript
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">{label}</span>
+      <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-neutral-400">{label}</span>
       {children}
     </label>
   );
 }
 
 const inputClass =
-  "w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-sky-500 focus:outline-none";
+  "w-full rounded-md border border-neutral-700 px-3 py-2 text-sm text-white focus:border-red-600 focus:outline-none";
 
 function ImageField({
   label,
@@ -45,7 +45,7 @@ function ImageField({
   return (
     <Field label={label}>
       <div className="flex items-start gap-3">
-        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100">
+        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md border border-neutral-800 bg-neutral-800">
           {value && <img src={value} alt="" className="h-full w-full object-cover" />}
         </div>
         <div className="flex-1 space-y-1.5">
@@ -71,7 +71,7 @@ function ImageField({
             type="button"
             disabled={uploading}
             onClick={() => fileInput.current?.click()}
-            className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="rounded-md border border-neutral-700 px-2 py-1 text-xs font-medium text-neutral-200 hover:bg-black disabled:opacity-50"
           >
             {uploading ? "Uploading…" : "Upload image"}
           </button>
@@ -190,15 +190,15 @@ export function SiteGalleryPage() {
   return (
     <div className="space-y-6 pb-16">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-800">Website Content</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="text-2xl font-semibold text-white">Website Content</h1>
+        <p className="mt-1 text-sm text-neutral-400">
           Everything shown on the public landing page (<code>/</code>) — text and images — is
           editable here.
         </p>
       </div>
 
-      {error && <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
-      {notice && <div className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">{notice}</div>}
+      {error && <div className="rounded-md bg-red-950 px-3 py-2 text-sm text-red-600">{error}</div>}
+      {notice && <div className="rounded-md bg-red-950 px-3 py-2 text-sm text-red-400">{notice}</div>}
 
       <SectionCard title="Gallery Strip" description="The scrolling photo strip below the cover video.">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-7">
@@ -208,7 +208,7 @@ export function SiteGalleryPage() {
             return (
               <div key={slot} className="flex flex-col gap-2">
                 <div
-                  className="overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+                  className="overflow-hidden rounded-lg border border-neutral-800 bg-neutral-800"
                   style={{ aspectRatio: "4 / 6" }}
                 >
                   {image ? (
@@ -218,7 +218,7 @@ export function SiteGalleryPage() {
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <div className="flex h-full items-center justify-center text-xs text-slate-400">Empty</div>
+                    <div className="flex h-full items-center justify-center text-xs text-neutral-500">Empty</div>
                   )}
                 </div>
                 <input
@@ -234,7 +234,7 @@ export function SiteGalleryPage() {
                   type="button"
                   disabled={saving}
                   onClick={() => fileInputs.current[slot]?.click()}
-                  className="rounded-md border border-slate-300 px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  className="rounded-md border border-neutral-700 px-2 py-1.5 text-xs font-medium text-neutral-200 hover:bg-black disabled:opacity-50"
                 >
                   {saving ? "Uploading…" : "Change"}
                 </button>
@@ -245,7 +245,7 @@ export function SiteGalleryPage() {
       </SectionCard>
 
       <SectionCard title="Contact Bar" description="Shown in the thin bar at the very top of the page.">
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Location">
             <input
               className={inputClass}
@@ -267,18 +267,25 @@ export function SiteGalleryPage() {
               onChange={(e) => setContent((prev) => ({ ...prev, contact: { ...prev.contact, hours: e.target.value } }))}
             />
           </Field>
+          <Field label="Phone numbers (separate with /)">
+            <input
+              className={inputClass}
+              value={content.contact.phone ?? ""}
+              onChange={(e) => setContent((prev) => ({ ...prev, contact: { ...prev.contact, phone: e.target.value } }))}
+            />
+          </Field>
         </div>
       </SectionCard>
 
       <SectionCard title="Hero Slides" description="The two rotating headlines over the cover video.">
         <div className="grid gap-6 md:grid-cols-2">
           {content.hero.slides.map((slide, i) => (
-            <div key={i} className="space-y-3 rounded-md border border-slate-100 p-3">
-              <p className="text-xs font-semibold text-slate-400">Slide {i + 1}</p>
+            <div key={i} className="space-y-3 rounded-md border border-neutral-800 p-3">
+              <p className="text-xs font-semibold text-neutral-500">Slide {i + 1}</p>
               <Field label="Eyebrow">
                 <input className={inputClass} value={slide.eyebrow} onChange={(e) => updateSlide(i, "eyebrow", e.target.value)} />
               </Field>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <Field label="Headline A">
                   <input className={inputClass} value={slide.headlineA} onChange={(e) => updateSlide(i, "headlineA", e.target.value)} />
                 </Field>
@@ -305,7 +312,7 @@ export function SiteGalleryPage() {
       <SectionCard title="Feature Cards" description="The four small cards below the gallery strip.">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {content.features.map((feature, i) => (
-            <div key={i} className="space-y-3 rounded-md border border-slate-100 p-3">
+            <div key={i} className="space-y-3 rounded-md border border-neutral-800 p-3">
               <Field label="Title">
                 <input className={inputClass} value={feature.title} onChange={(e) => updateFeature(i, "title", e.target.value)} />
               </Field>
@@ -354,7 +361,7 @@ export function SiteGalleryPage() {
       <SectionCard title="Services" description="The four service cards near the bottom of the page.">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {content.services.map((service, i) => (
-            <div key={i} className="space-y-3 rounded-md border border-slate-100 p-3">
+            <div key={i} className="space-y-3 rounded-md border border-neutral-800 p-3">
               <ImageField
                 label="Image"
                 value={service.image}
@@ -383,7 +390,7 @@ export function SiteGalleryPage() {
           type="button"
           onClick={saveContent}
           disabled={savingContent}
-          className="rounded-md bg-sky-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg hover:bg-sky-600 disabled:opacity-50"
+          className="rounded-md bg-red-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg hover:bg-red-700 disabled:opacity-50"
         >
           {savingContent ? "Saving…" : "Save Changes"}
         </button>

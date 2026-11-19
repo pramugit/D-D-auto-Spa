@@ -34,8 +34,13 @@ export async function calculateJobCardProfit(jobCardId: string): Promise<ProfitB
 
   const revenue = jobCard.invoice ? Number(jobCard.invoice.total) : 0;
 
+  // External purchases cost what they cost (externalCost); stock items
+  // cost what the shop paid per unit (item.costPerUnit).
   const materialCost = jobCard.inventoryUsages.reduce(
-    (sum, usage) => sum + Number(usage.quantityUsed) * Number(usage.item.costPerUnit),
+    (sum, usage) =>
+      sum +
+      Number(usage.quantityUsed) *
+        Number(usage.sourceType === "EXTERNAL_PURCHASE" ? usage.externalCost ?? 0 : usage.item?.costPerUnit ?? 0),
     0
   );
 

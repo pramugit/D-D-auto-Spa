@@ -1,24 +1,24 @@
 const COLORS: Record<string, string> = {
-  PENDING: "bg-slate-100 text-slate-700",
-  CONFIRMED: "bg-blue-100 text-blue-700",
-  IN_PROGRESS: "bg-amber-100 text-amber-700",
-  QUALITY_CHECK: "bg-purple-100 text-purple-700",
-  READY: "bg-teal-100 text-teal-700",
-  COMPLETED: "bg-green-100 text-green-700",
-  CANCELLED: "bg-red-100 text-red-700",
-  AVAILABLE: "bg-green-100 text-green-700",
-  OCCUPIED: "bg-amber-100 text-amber-700",
-  MAINTENANCE: "bg-red-100 text-red-700",
-  UNPAID: "bg-red-100 text-red-700",
-  PARTIALLY_PAID: "bg-amber-100 text-amber-700",
-  PAID: "bg-green-100 text-green-700",
-  PENDING_VERIFICATION: "bg-amber-100 text-amber-700",
-  VERIFIED: "bg-green-100 text-green-700",
-  REJECTED: "bg-red-100 text-red-700",
+  PENDING: "bg-neutral-800 text-neutral-200",
+  CONFIRMED: "bg-red-950 text-red-400",
+  IN_PROGRESS: "bg-red-950 text-red-300",
+  QUALITY_CHECK: "bg-red-950 text-red-300",
+  READY: "bg-red-950 text-red-300",
+  COMPLETED: "bg-red-950 text-red-400",
+  CANCELLED: "bg-red-950 text-red-400",
+  AVAILABLE: "bg-red-950 text-red-400",
+  OCCUPIED: "bg-red-950 text-red-300",
+  MAINTENANCE: "bg-red-950 text-red-400",
+  UNPAID: "bg-red-950 text-red-400",
+  PARTIALLY_PAID: "bg-red-950 text-red-300",
+  PAID: "bg-red-950 text-red-400",
+  PENDING_VERIFICATION: "bg-red-950 text-red-300",
+  VERIFIED: "bg-red-950 text-red-400",
+  REJECTED: "bg-red-950 text-red-400",
 };
 
 export function StatusBadge({ status }: { status: string }) {
-  const cls = COLORS[status] ?? "bg-slate-100 text-slate-700";
+  const cls = COLORS[status] ?? "bg-neutral-800 text-neutral-200";
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${cls}`}>
       {status.replace(/_/g, " ")}

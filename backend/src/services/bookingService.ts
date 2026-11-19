@@ -1,18 +1,29 @@
+import { ITEMS_SELECT, REPAIRS_SELECT, bookingMinutes, packageMinutes } from "./durationService";
 import { prisma } from "../utils/prisma";
+import * as schedule from "./scheduleService";
 import { AppError } from "../utils/AppError";
+import { assertReadyToStart } from "./damageInspectionService";
+import { releaseBay } from "./jobFlowService";
 import type { BookingStatus, NotificationChannel, NotificationType, StaffRole } from "@prisma/client";
 import { createAndSendNotification, sendWhatsAppProgressUpdate } from "./notificationService";
 import { safeCustomerSelect } from "../utils/prismaSelects";
 import { PERMISSIONS } from "../config/permissions";
 
-export const BUSINESS_START_HOUR = 9;
-export const BUSINESS_END_HOUR = 17;
+export const BUSINESS_START_HOUR = 10;
+export const BUSINESS_END_HOUR = 18;
 const SLOT_GRANULARITY_MINUTES = 30;
+// The service station's single physical location — 431/D, Ihala Kosgama, Kosgama (Sri Lanka)
+// (UTC+5:30) — used to anchor BUSINESS_START_HOUR/BUSINESS_END_HOUR (and
+// "today") to the station's actual wall-clock day rather than the server's
+// UTC day, so a slot at BUSINESS_START_HOUR shows as that hour in the
+// customer's browser (customers are all in this one timezone; see also
+// WHATSAPP_DEFAULT_COUNTRY_CODE="94").
+const BUSINESS_TZ_OFFSET_MINUTES = 330;
 const DEFAULT_SERVICE_DURATION_MINUTES = 60;
 
-// Every status transition the customer needs to hear about. Statuses
-// omitted here (QUALITY_CHECK is internal staff work) fire no
-// notification.
+// Every status transition the customer needs to hear about. PENDING is
+// handled separately in createBooking (it's the booking's initial value,
+// not something transitionBookingStatus ever transitions *into*).
 const CUSTOMER_NOTIFICATION_BY_STATUS: Partial<
   Record<BookingStatus, { type: NotificationType; message: string; channel: NotificationChannel }>
 > = {
@@ -24,6 +35,11 @@ const CUSTOMER_NOTIFICATION_BY_STATUS: Partial<
   IN_PROGRESS: {
     type: "JOB_STARTED",
     message: "Work on your vehicle has started.",
+    channel: "SMS",
+  },
+  QUALITY_CHECK: {
+    type: "JOB_QUALITY_CHECK",
+    message: "Your vehicle is undergoing a final quality check.",
     channel: "SMS",
   },
   READY: {
@@ -38,13 +54,16 @@ const CUSTOMER_NOTIFICATION_BY_STATUS: Partial<
   },
 };
 
-// WhatsApp fires on a wider set than the SMS/EMAIL map above (adds
-// COMPLETED) — same trigger point in transitionBookingStatus below,
-// just a second lookup/send alongside the existing one rather than a
-// separate hook elsewhere in the codebase.
+// WhatsApp fires on the same milestones as the SMS/EMAIL map above, plus
+// COMPLETED and PENDING (booking received) which don't get a separate
+// SMS/EMAIL) — same trigger points in transitionBookingStatus/createBooking
+// below, just a second lookup/send alongside the existing one rather than
+// a separate hook elsewhere in the codebase.
 const WHATSAPP_NOTIFICATION_TYPE_BY_STATUS: Partial<Record<BookingStatus, NotificationType>> = {
+  PENDING: "BOOKING_RECEIVED",
   CONFIRMED: "BOOKING_CONFIRMED",
   IN_PROGRESS: "JOB_STARTED",
+  QUALITY_CHECK: "JOB_QUALITY_CHECK",
   READY: "JOB_READY",
   COMPLETED: "JOB_COMPLETED",
   CANCELLED: "BOOKING_CANCELLED",
@@ -117,7 +136,7 @@ const TRANSITION_REQUIRES_ROLE: Partial<Record<BookingStatus, StaffRole[]>> = {
  * PATCH /job-cards/:id/assign-technician endpoint.
  */
 export async function pickLeastBusyTechnician(): Promise<string | null> {
-  const technicians = await prisma.user.findMany({ where: { role: "TECHNICIAN" }, select: { id: true } });
+  const technicians = await prisma.user.findMany({ where: { role: "TECHNICIAN", active: true }, select: { id: true } });
   if (technicians.length === 0) return null;
 
   const activeCounts = await prisma.jobCardTechnician.groupBy({
@@ -134,13 +153,13 @@ export async function pickLeastBusyTechnician(): Promise<string | null> {
   }, technicians[0].id);
 }
 
-interface BookingLineItem {
+export interface BookingLineItem {
   serviceId?: string;
   packageId?: string;
 }
 
 /** Resolves price + duration for one booking line item against a vehicle type. */
-async function resolveLineItem(item: BookingLineItem, vehicleType: string) {
+export async function resolveLineItem(item: BookingLineItem, vehicleType: string) {
   if (item.serviceId) {
     const service = await prisma.service.findUnique({
       where: { id: item.serviceId },
@@ -157,8 +176,7 @@ async function resolveLineItem(item: BookingLineItem, vehicleType: string) {
     include: { services: { include: { service: true } } },
   });
   if (!pkg || !pkg.active) throw new AppError(400, `Package ${item.packageId} not found or inactive`);
-  const durationMinutes = pkg.services.reduce((sum, s) => sum + s.service.durationMinutes, 0);
-  return { serviceId: null, packageId: pkg.id, price: pkg.discountedPrice, durationMinutes };
+  return { serviceId: null, packageId: pkg.id, price: pkg.discountedPrice, durationMinutes: packageMinutes(pkg) };
 }
 
 export async function createBooking(input: {
@@ -166,6 +184,9 @@ export async function createBooking(input: {
   vehicleId: string;
   scheduledAt: Date;
   items: BookingLineItem[];
+  isWalkIn?: boolean;
+  /** Booked by the customer themselves — their booking rules apply (notice, days ahead). */
+  byCustomer?: boolean;
 }) {
   const vehicle = await prisma.vehicle.findUnique({ where: { id: input.vehicleId } });
   if (!vehicle) throw new AppError(404, "Vehicle not found");
@@ -177,12 +198,23 @@ export async function createBooking(input: {
     input.items.map((item) => resolveLineItem(item, vehicle.vehicleType))
   );
 
+  // Time management: a scheduled booking must fit the opening hours and a
+  // free bay (checked here, server-side, so two people can't take the same
+  // slot); it's given that bay straight away. Walk-ins start now and take
+  // whichever bay is free (or none, if every bay is busy).
+  const durationMinutes = resolvedItems.reduce((sum, r) => sum + (r.durationMinutes ?? 0), 0);
+  const bayId = input.isWalkIn
+    ? await schedule.bayForWalkIn(durationMinutes)
+    : await schedule.claimSlot(new Date(input.scheduledAt), durationMinutes, { customer: !!input.byCustomer });
+
   const booking = await prisma.booking.create({
     data: {
       customerId: input.customerId,
       vehicleId: input.vehicleId,
       scheduledAt: input.scheduledAt,
+      bayId,
       status: "PENDING",
+      isWalkIn: input.isWalkIn ?? false,
       services: {
         create: resolvedItems.map((r) => ({
           serviceId: r.serviceId,
@@ -198,71 +230,63 @@ export async function createBooking(input: {
     },
   });
 
+  // PENDING is the booking's initial value, never something
+  // transitionBookingStatus transitions *into* — so its WhatsApp "request
+  // received" notification fires here instead of that function.
+  await sendWhatsAppProgressUpdate(booking, null, "PENDING", WHATSAPP_NOTIFICATION_TYPE_BY_STATUS.PENDING!);
+
   return booking;
 }
 
-/** Total estimated duration (minutes) of a booking's line items. */
-export async function bookingDurationMinutes(bookingId: string): Promise<number> {
-  const items = await prisma.bookingService.findMany({
-    where: { bookingId },
-    include: { service: true, package: { include: { services: { include: { service: true } } } } },
+/**
+ * A walk-in job — a customer who showed up without a prior booking. Same
+ * pipeline and JobCard lifecycle as a scheduled booking (Confirmed -> In
+ * Progress -> Quality Check -> Ready -> Completed), just entered through a
+ * faster path: created with scheduledAt=now and immediately auto-confirmed
+ * (no separate receptionist confirmation step, since the customer is
+ * already standing there), which also creates its JobCard the same way
+ * transitionBookingStatus always does on reaching CONFIRMED.
+ */
+export async function createWalkInJob(input: {
+  customerId: string;
+  vehicleId: string;
+  items: BookingLineItem[];
+  mileage?: number;
+  actor: TransitionActor;
+}) {
+  const booking = await createBooking({
+    customerId: input.customerId,
+    vehicleId: input.vehicleId,
+    scheduledAt: new Date(),
+    items: input.items,
+    isWalkIn: true,
   });
-  return items.reduce((sum, item) => {
-    if (item.service) return sum + item.service.durationMinutes;
-    if (item.package) {
-      return sum + item.package.services.reduce((s, ps) => s + ps.service.durationMinutes, 0);
-    }
-    return sum + DEFAULT_SERVICE_DURATION_MINUTES;
-  }, 0);
+  // Odometer at drop-off: kept on this job and as the vehicle's latest reading.
+  if (input.mileage !== undefined) {
+    await prisma.booking.update({ where: { id: booking.id }, data: { mileage: input.mileage } });
+    await prisma.vehicle.update({ where: { id: input.vehicleId }, data: { mileage: input.mileage } });
+  }
+  // Deliberately drop actor.role here: TRANSITION_REQUIRES_ROLE's CONFIRMED
+  // entry (RECEPTIONIST/MANAGER/ADMIN) governs the Bookings section's manual
+  // "confirm this appointment" action. A walk-in's confirmation is implicit
+  // in its creation — already gated by jobBoard.edit at the route level,
+  // which also allows TECHNICIAN — so this transition is system-triggered,
+  // same as the payment-triggered auto-completion's role-less call.
+  return transitionBookingStatus(booking.id, "CONFIRMED", { userId: input.actor.userId });
 }
 
-export async function getAvailability(dateStr: string, requestedDurationMinutes?: number) {
-  const bayCount = await prisma.bay.count({ where: { status: { not: "MAINTENANCE" } } });
-  if (bayCount === 0) {
-    return { date: dateStr, bayCount: 0, slots: [] };
-  }
-
-  const dayStart = new Date(`${dateStr}T00:00:00.000Z`);
-  const dayEnd = new Date(`${dateStr}T23:59:59.999Z`);
-
-  const bookingsOnDate = await prisma.booking.findMany({
-    where: {
-      scheduledAt: { gte: dayStart, lte: dayEnd },
-      status: { notIn: ["CANCELLED"] },
-    },
-    select: { id: true, scheduledAt: true },
+/** Estimated minutes for a booking: its services/packages plus any damage repairs added at inspection. */
+export async function bookingDurationMinutes(bookingId: string): Promise<number> {
+  const b = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    select: { services: { select: ITEMS_SELECT }, jobCard: { select: REPAIRS_SELECT } },
   });
+  return b ? bookingMinutes(b) : DEFAULT_SERVICE_DURATION_MINUTES;
+}
 
-  const bookingsWithDuration = await Promise.all(
-    bookingsOnDate.map(async (b) => ({
-      start: b.scheduledAt,
-      end: new Date(b.scheduledAt.getTime() + (await bookingDurationMinutes(b.id)) * 60000),
-    }))
-  );
-
-  const duration = requestedDurationMinutes ?? DEFAULT_SERVICE_DURATION_MINUTES;
-  const slots: { time: string; available: boolean }[] = [];
-
-  for (
-    let minutes = BUSINESS_START_HOUR * 60;
-    minutes + duration <= BUSINESS_END_HOUR * 60;
-    minutes += SLOT_GRANULARITY_MINUTES
-  ) {
-    const slotStart = new Date(`${dateStr}T00:00:00.000Z`);
-    slotStart.setUTCMinutes(minutes);
-    const slotEnd = new Date(slotStart.getTime() + duration * 60000);
-
-    const overlapping = bookingsWithDuration.filter(
-      (b) => b.start < slotEnd && slotStart < b.end
-    ).length;
-
-    slots.push({
-      time: slotStart.toISOString(),
-      available: overlapping < bayCount,
-    });
-  }
-
-  return { date: dateStr, bayCount, slots };
+/** Free slots for a day — see scheduleService (opening hours, holidays, bays, buffer, customer rules). */
+export async function getAvailability(dateStr: string, requestedDurationMinutes?: number, q: schedule.SlotQuery = {}) {
+  return schedule.getAvailability(dateStr, requestedDurationMinutes, q);
 }
 
 export interface TransitionActor {
@@ -305,6 +329,28 @@ export async function transitionBookingStatus(
         403,
         `Only ${requiredRoles.join("/")} can move a booking from ${booking.status} to ${nextStatus}`
       );
+    }
+  }
+
+  // A scheduled booking can't start until its pre-service damage
+  // inspection is done and confirmed by the customer (see
+  // damageInspectionService). Walk-ins are inspected with the customer
+  // standing there during Daily Jobs intake, so they aren't held up here.
+  if (nextStatus === "IN_PROGRESS" && !booking.isWalkIn) {
+    if (!booking.jobCard) throw new AppError(400, "This booking has no job card yet");
+    await assertReadyToStart(booking.jobCard.id);
+  }
+
+  // A walk-in (Daily Jobs) is handed back only once it's paid for: staff
+  // press "Completed" after taking payment, so READY -> COMPLETED is
+  // refused while the invoice isn't fully paid. Scheduled bookings keep
+  // their existing behaviour.
+  if (nextStatus === "COMPLETED" && booking.isWalkIn) {
+    const invoice = booking.jobCard
+      ? await prisma.invoice.findUnique({ where: { jobCardId: booking.jobCard.id }, select: { status: true } })
+      : null;
+    if (invoice?.status !== "PAID") {
+      throw new AppError(400, "This daily job can only be completed after the customer has paid the invoice in full");
     }
   }
 
@@ -377,6 +423,11 @@ export async function transitionBookingStatus(
     return result;
   });
 
+  // The car has left (or never needs) its bay once the work is done.
+  if (nextStatus === "READY" || nextStatus === "COMPLETED" || nextStatus === "CANCELLED") {
+    await releaseBay(bookingId);
+  }
+
   // Fire-and-record notifications on every customer-relevant milestone.
   // sendNotification itself is a stub — see notificationService.ts for
   // where a real SMS/email/WhatsApp provider plugs in.
@@ -389,6 +440,10 @@ export async function transitionBookingStatus(
       channel: notification.channel,
     });
   }
+
+  // Materials are NOT taken out of stock automatically when a job starts —
+  // staff record what was actually used by hand (Daily Jobs step 7 /
+  // job card "Inventory Used"), which deducts stock item by item.
 
   const whatsappType = WHATSAPP_NOTIFICATION_TYPE_BY_STATUS[nextStatus];
   if (whatsappType) {
@@ -462,6 +517,8 @@ export interface AttentionBooking {
   slaMinutes: number | null;
   slaBreached: boolean;
   unassigned: boolean;
+  /** Daily Jobs walk-in (true) or scheduled booking (false). */
+  isWalkIn: boolean;
   customer: { id: string; name: string };
   vehicle: { id: string; plateNumber: string; make: string; model: string };
 }
@@ -507,6 +564,7 @@ export async function getBookingsNeedingAttention(): Promise<AttentionBooking[]>
         slaMinutes,
         slaBreached,
         unassigned,
+        isWalkIn: booking.isWalkIn,
         customer: booking.customer,
         vehicle: booking.vehicle,
       });
@@ -514,4 +572,74 @@ export async function getBookingsNeedingAttention(): Promise<AttentionBooking[]>
   }
 
   return results;
+}
+
+/**
+ * Move a booking to a new time (staff, or the customer within their change
+ * window). Re-checks the slot, re-picks a bay, logs it on the booking's
+ * timeline and tells the customer on WhatsApp.
+ */
+export async function rescheduleBooking(
+  bookingId: string,
+  newStart: Date,
+  actor: { userId: string | null; customerId?: string; notes?: string }
+) {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: {
+      customer: { select: { name: true } },
+      vehicle: { select: { plateNumber: true, make: true, model: true } },
+      services: { include: { service: true, package: { include: { services: { include: { service: true } } } } } },
+    },
+  });
+  if (!booking) throw new AppError(404, "Booking not found");
+  if (actor.customerId && booking.customerId !== actor.customerId) throw new AppError(403, "Not your booking");
+  // Requests get their time through propose-time / accept-time instead.
+  if (booking.requestStage === "REQUESTED" || booking.requestStage === "TIME_PROPOSED") {
+    throw new AppError(
+      400,
+      actor.customerId
+        ? "Please confirm the offered time or ask for another time instead."
+        : "This is a booking request — use “Set date & time” to send the customer a time."
+    );
+  }
+  if (!["PENDING", "CONFIRMED"].includes(booking.status)) {
+    throw new AppError(400, "Only bookings that haven't started can be moved.");
+  }
+  if (booking.isWalkIn) throw new AppError(400, "Walk-in jobs don't have a booked time to move.");
+  if (actor.customerId) {
+    const s = await schedule.getScheduleSettings();
+    if (booking.scheduledAt.getTime() - Date.now() < s.customerChangeHours * 3600000) {
+      throw new AppError(400, `Bookings can be changed online up to ${s.customerChangeHours} hours before. Please call us to change it now.`);
+    }
+  }
+  const minutes = await bookingDurationMinutes(bookingId);
+  const bayId = await schedule.claimSlot(newStart, minutes, { customer: !!actor.customerId, excludeBookingId: bookingId });
+  const fmt = (d: Date) =>
+    d.toLocaleString("en-GB", { timeZone: "Asia/Colombo", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const from = fmt(booking.scheduledAt);
+  const to = fmt(newStart);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const u = await tx.booking.update({ where: { id: bookingId }, data: { scheduledAt: newStart, bayId } });
+    await tx.bookingActivityLog.create({
+      data: {
+        bookingId,
+        fromStatus: booking.status,
+        toStatus: booking.status,
+        changedByUserId: actor.userId,
+        notes: `Rescheduled from ${from} to ${to}${actor.customerId ? " (by the customer)" : ""}${actor.notes ? ` — ${actor.notes}` : ""}`,
+      },
+    });
+    return u;
+  });
+
+  await createAndSendNotification({
+    customerId: booking.customerId,
+    type: "GENERAL",
+    channel: "WHATSAPP",
+    message: `Hi ${booking.customer.name}, your booking for ${booking.vehicle.make} ${booking.vehicle.model} (${booking.vehicle.plateNumber}) has been moved to ${to}. See you then!`,
+  }).catch((err) => console.error("[schedule] reschedule notification failed:", err));
+
+  return updated;
 }
